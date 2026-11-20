@@ -60,6 +60,16 @@ function listValues(values) {
   }).filter(Boolean);
 }
 
+function educationEntity(entry, text) {
+  if (entry && typeof entry === 'object') {
+    return clean(entry.school || entry.name || entry.title);
+  }
+  const separated = clean(text).split(/\s+[—–|]\s+/)[0];
+  if (separated && separated !== clean(text)) return separated;
+  const atSchool = clean(text).match(/\b(?:at|@)\s+(.+)$/i)?.[1];
+  return atSchool || clean(text);
+}
+
 function groupValues(values, maxLength = CONFIG.limits.factText) {
   const groups = [];
   let current = '';
@@ -81,6 +91,7 @@ function groupValues(values, maxLength = CONFIG.limits.factText) {
 export function profileToFacts(profile = {}) {
   const facts = [];
   const seen = new Set();
+  const companyEntities = new Set();
   const profileUrl = clean(profile.profileUrl) || undefined;
 
   function add(type, text, meta = {}) {
@@ -106,9 +117,13 @@ export function profileToFacts(profile = {}) {
   } else if (clean(profile.headline || profile.bio)) {
     add('role', 'Profile headline: ' + clean(profile.headline || profile.bio));
   }
-  if (currentCompany) add('company', 'Current company: ' + currentCompany, { confidence: 0.9 });
+  if (currentCompany) {
+    companyEntities.add(currentCompany.toLowerCase());
+    add('company', 'Current company: ' + currentCompany, { confidence: 0.9, entity: currentCompany });
+  }
   for (const company of listValues(profile.pastCompanies)) {
-    add('company', 'Previous company: ' + company);
+    companyEntities.add(company.toLowerCase());
+    add('company', 'Previous company: ' + company, { entity: company });
   }
 
   for (const entry of Array.isArray(profile.experienceEntries) ? profile.experienceEntries : []) {
@@ -124,16 +139,25 @@ export function profileToFacts(profile = {}) {
     const role = [title, company ? 'at ' + company : '', employmentType, duration]
       .filter(Boolean).join(' ');
     if (role) add('role', (entry.isCurrent ? 'Current experience: ' : 'Experience: ') + role);
+    if (company && !companyEntities.has(company.toLowerCase())) {
+      companyEntities.add(company.toLowerCase());
+      add('company', 'Experience company: ' + company, { entity: company });
+    }
   }
 
   for (const aboutFact of splitAbout(profile.about)) add('about', aboutFact);
 
-  for (const education of listValues(profile.educationEntries)) {
-    add('education', education);
+  for (const entry of Array.isArray(profile.educationEntries) ? profile.educationEntries : []) {
+    const education = typeof entry === 'string'
+      ? clean(entry)
+      : clean(entry?.school || entry?.name || entry?.title || Object.values(entry || {}).join(' '));
+    const school = educationEntity(entry, education);
+    if (education) add('education', education, { entity: school || education });
   }
 
-  for (const skillGroup of groupValues(listValues(profile.skills))) {
-    add('skill', skillGroup);
+  const skillValues = listValues(profile.skills);
+  for (const skillGroup of groupValues(skillValues)) {
+    add('skill', skillGroup, { entities: skillGroup.split(',').map(clean).filter(Boolean) });
   }
 
   if (clean(profile.location)) add('location', clean(profile.location));

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runDeepPipeline } from '../layers/pipeline.js';
+import { runDeepPipeline } from '../src/layers/pipeline.js';
 
 test('pipeline emits ordered progress and returns a placeholder draft', async () => {
   const events = [];
@@ -39,4 +39,15 @@ test('a failing layer is reported while later layers still run', async () => {
   assert.equal(result.layers.approach.status, 'done');
   assert.ok(events.some((event) => event.layer === 'memory' && event.status === 'error'));
   assert.equal(result.drafts[0].text, 'Placeholder draft.');
+});
+
+test('the default pipeline runs Layer 1 and includes its matches in the result', async () => {
+  const result = await runDeepPipeline({
+    profileJSON: { skills: ['Python'] },
+    memoryCard: { skills: ['Python'] }
+  });
+  assert.equal(result.layers.memory.status, 'done');
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.matches[0].tier, 'strong');
+  assert.match(result.layers.memory.detail, /match/);
 });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertResumeSectionsSafe, extractResumeIdentity, findResumePii, sectionizeResumeText } from '../utils/resume.js';
-import { extractPdfText, selectablePageText } from '../utils/pdf.js';
+import { assertResumeSectionsSafe, extractResumeIdentity, findResumePii, sectionizeResumeText } from '../src/utils/resume.js';
+import { extractPdfText, selectablePageText } from '../src/utils/pdf.js';
 
 const sampleResume = `
 Alex Example

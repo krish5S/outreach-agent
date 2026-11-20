@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeGeneratedMessage } from '../utils/message.js';
+import { sanitizeGeneratedMessage } from '../src/utils/message.js';
 
 test('removes an AI placeholder signature when sender name is not set', () => {
   assert.equal(

@@ -2,6 +2,9 @@ import { CONFIG } from '../utils/config.js';
 import { assertResumeSectionsSafe, findResumePii, redactResumeText } from '../utils/resume.js';
 import { callModel } from '../utils/llm.js';
 import { buildResumeStructuringPrompt } from '../utils/prompts/resume.js';
+import { embed } from '../utils/embeddings.js';
+import { matchFacts } from '../utils/matcher.js';
+import { profileToFacts } from '../utils/facts.js';
 
 const MAX_FACTS = 40;
 const MAX_STRING = 1000;
@@ -34,26 +37,34 @@ function cleanObjectArray(value, fields, maxItems = 20) {
 export function memoryCardToFacts(card = {}) {
   const facts = [];
   const seen = new Set();
-  const add = (type, value) => {
+  const add = (type, value, meta = {}) => {
     const text = cleanText(value, 200);
-    const key = text.toLowerCase();
+    const key = type + ':' + text.toLowerCase();
     if (!text || seen.has(key) || facts.length >= MAX_FACTS) return;
     seen.add(key);
-    facts.push({ id: 'M' + (facts.length + 1), source: 'me', type, text, meta: {} });
+    facts.push({ id: 'M' + (facts.length + 1), source: 'me', type, text, meta });
   };
 
   add('role', card.headline);
   add('about', card.summary);
-  for (const skill of card.skills || []) add('skill', 'Skill: ' + skill);
+  for (const skill of card.skills || []) add('skill', 'Skill: ' + skill, { entities: [skill] });
   for (const entry of card.education || []) {
-    add('education', [entry.degree, entry.field, entry.school, entry.years].filter(Boolean).join(' — '));
+    add('education', [entry.degree, entry.field, entry.school, entry.years].filter(Boolean).join(' — '), {
+      entity: entry.school || ''
+    });
   }
   for (const entry of card.experience || []) {
     const text = [entry.title, entry.org, entry.years, ...(entry.highlights || [])].filter(Boolean).join(' — ');
     add('role', text);
+    if (entry.org) add('company', entry.org, { entity: entry.org });
   }
   for (const entry of card.projects || []) {
-    add('project', [entry.name, entry.summary, ...(entry.tech || [])].filter(Boolean).join(' — '));
+    const tools = Array.isArray(entry.tech) ? entry.tech : [];
+    add('project', [entry.name, entry.summary, ...tools].filter(Boolean).join(' — '), {
+      projectName: entry.name || '',
+      tools
+    });
+    for (const tool of tools) add('skill', 'Skill: ' + tool, { entities: [tool] });
   }
   for (const achievement of card.achievements || []) add('about', 'Achievement: ' + achievement);
   add('goal', card.goals);
@@ -117,4 +128,53 @@ export async function buildMemoryCard(sections, {
     reasoningEffort: 'low'
   });
   return validateMemoryCard(result, { name, now });
+}
+
+export async function runMemoryLayer(ctx = {}, {
+  storage = ctx.storage,
+  thresholds = CONFIG.thresholds,
+  embedder = embed,
+  matcher = matchFacts
+} = {}) {
+  const card = ctx.memoryCard || (storage?.getMemoryCard ? await storage.getMemoryCard() : null);
+  if (!card) {
+    return { status: 'skipped', detail: 'No saved resume memory card; Layer 1 matching was skipped.', matches: [] };
+  }
+
+  const profile = ctx.profileJSON || ctx.profile || {};
+  const meFacts = memoryCardToFacts(card);
+  const otherFacts = profileToFacts(profile)
+    .map((fact) => ({ ...fact, text: redactResumeText(fact.text).text }))
+    .filter((fact) => fact.text);
+  if (!meFacts.length) {
+    return { status: 'skipped', detail: 'The saved memory card has no matchable facts.', matches: [] };
+  }
+  if (!otherFacts.length) {
+    return { status: 'skipped', detail: 'The scraped profile has no facts to compare.', matches: [] };
+  }
+
+  const vectors = await embedder(
+    [...meFacts, ...otherFacts].map((fact) => fact.text),
+    {
+      kind: 'fact',
+      storage
+    }
+  );
+  const factsWithVectors = [...meFacts, ...otherFacts].map((fact, index) => ({
+    ...fact,
+    vec: vectors[index]
+  }));
+  const matches = matcher(
+    factsWithVectors.slice(0, meFacts.length),
+    factsWithVectors.slice(meFacts.length),
+    { thresholds, layer: 1, topK: 6 }
+  );
+
+  return {
+    status: 'done',
+    detail: matches.length
+      ? `Found ${matches.length} profile-to-resume match${matches.length === 1 ? '' : 'es'}.`
+      : 'No resume-to-profile matches scored above the medium threshold.',
+    matches
+  };
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createStorage } from '../utils/storage.js';
+import { createStorage } from '../src/utils/storage.js';
 
 function makeArea(initial = {}) {
   const values = { ...initial };
@@ -56,4 +56,41 @@ test('clearAllData clears local and session extension data', async () => {
 
   assert.deepEqual(localArea.values, {});
   assert.deepEqual(sessionArea.values, {});
+});
+
+test('settings expose only the remaining Groq and resume fields', async () => {
+  const localArea = makeArea();
+  const storage = createStorage({ localArea, sessionArea: makeArea() });
+
+  await storage.setSettings({
+    userApiKey: 'groq-test-key',
+    userName: 'Alex'
+  });
+
+  assert.deepEqual(await storage.getSettings(), {
+    userApiKey: 'groq-test-key',
+    userName: 'Alex',
+    userBio: '',
+    resumeBase64: '',
+    resumeFileName: ''
+  });
+});
+
+test('retired embeddings settings and cached hosted vectors are removed', async () => {
+  const localArea = makeArea({
+    embeddingApiKey: 'old-secret',
+    embeddingBackend: 'openai',
+    vecCache: {
+      'openai:text-embedding-3-small:fact:abc': [1, 0],
+      'keyword:default:fact:old': [0, 1],
+      'keyword:local:fact:current': [1, 1]
+    }
+  });
+  const storage = createStorage({ localArea, sessionArea: makeArea() });
+
+  await storage.clearDeprecatedEmbeddingData();
+
+  assert.equal(localArea.values.embeddingApiKey, undefined);
+  assert.equal(localArea.values.embeddingBackend, undefined);
+  assert.deepEqual(localArea.values.vecCache, { 'keyword:local:fact:current': [1, 1] });
 });

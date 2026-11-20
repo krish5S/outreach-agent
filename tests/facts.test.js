@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { profileToFacts } from '../utils/facts.js';
+import { profileToFacts } from '../src/utils/facts.js';
 
 const fixtureUrl = new URL('./fixtures/profile-ada-example.json', import.meta.url);
 const profile = JSON.parse(await readFile(fixtureUrl, 'utf8'));
@@ -16,6 +16,9 @@ test('profileToFacts maps the real scraper shape to distinct facts', () => {
   assert.ok(types.has('skill'));
   assert.ok(types.has('location'));
   assert.ok(types.has('post'));
+  assert.equal(facts.find((fact) => fact.type === 'education').meta.entity, 'Example University');
+  assert.equal(facts.find((fact) => fact.type === 'company').meta.entity, 'Example Robotics Lab');
+  assert.ok(facts.find((fact) => fact.type === 'skill').meta.entities.includes('Python'));
   assert.equal(new Set(facts.map((fact) => fact.id)).size, facts.length);
   assert.ok(facts.every((fact) => fact.source === 'person'));
   assert.ok(facts.every((fact) => fact.text.length > 0 && fact.text.length <= 200));

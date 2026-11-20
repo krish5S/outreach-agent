@@ -275,15 +275,59 @@ function handleDeepRunEvent(event) {
   if (event?.type === 'result') {
     const draft = event.result?.drafts?.[0]?.text || 'No placeholder draft was returned.';
     document.getElementById('deep-draft').value = draft;
+    renderMemoryMatches(event.result?.matches || [], event.result?.layers?.memory);
     document.getElementById('deep-result').classList.remove('hidden');
     finishDeepRun();
-    showCurrentStatus('Step 1 pipeline completed. This is a placeholder draft.', 'success');
+    const memoryDetail = event.result?.layers?.memory?.detail || 'Layer 1 matching completed.';
+    showCurrentStatus(memoryDetail + ' Message drafting remains a placeholder until a later step.', 'success');
     return;
   }
 
   if (event?.type === 'error') {
     finishDeepRun();
     showCurrentStatus(event.error || 'Deep Mode could not complete this run.', 'error');
+  }
+}
+
+function renderMemoryMatches(matches, layerResult = {}) {
+  const list = document.getElementById('memory-match-list');
+  list.replaceChildren();
+  if (!Array.isArray(matches) || !matches.length) {
+    const empty = document.createElement('div');
+    empty.className = 'memory-match-empty';
+    empty.textContent = layerResult?.detail || 'No matches cleared the medium threshold. Deep Mode will not claim a connection from weak overlap.';
+    list.append(empty);
+    return;
+  }
+
+  for (const match of matches) {
+    const item = document.createElement('article');
+    item.className = 'memory-match-item';
+
+    const header = document.createElement('div');
+    header.className = 'memory-match-header';
+    const tier = document.createElement('span');
+    tier.className = 'memory-match-tier ' + (match.tier === 'strong' ? 'strong' : 'medium');
+    tier.textContent = (match.tier || 'match') + (match.exact ? ' · exact entity' : '');
+    const score = document.createElement('span');
+    score.className = 'memory-match-score';
+    score.textContent = Math.round((Number(match.score) || 0) * 100) + '%';
+    header.append(tier, score);
+
+    const meFact = document.createElement('p');
+    meFact.className = 'memory-match-fact';
+    const meLabel = document.createElement('strong');
+    meLabel.textContent = 'You: ';
+    meFact.append(meLabel, document.createTextNode(match.meText || match.meFactId || ''));
+
+    const otherFact = document.createElement('p');
+    otherFact.className = 'memory-match-fact';
+    const otherLabel = document.createElement('strong');
+    otherLabel.textContent = 'Profile: ';
+    otherFact.append(otherLabel, document.createTextNode(match.otherText || match.otherFactId || ''));
+
+    item.append(header, meFact, otherFact);
+    list.append(item);
   }
 }
 
@@ -546,7 +590,7 @@ async function handlePrepareResume() {
   try {
     let rawText = document.getElementById('resume-text-input').value;
     if (selectedResumeFile) {
-      const { extractPdfText } = await import(chrome.runtime.getURL('utils/pdf.js'));
+      const { extractPdfText } = await import(chrome.runtime.getURL('src/utils/pdf.js'));
       rawText = await extractPdfText(selectedResumeFile, {
         onProgress: ({ phase, page, total, progress }) => {
           if (phase === 'ocr') showResumeStatus(`Running local OCR on page ${page} of ${total} (${Math.round((progress || 0) * 100)}%)…`, 'pending');
@@ -558,7 +602,7 @@ async function handlePrepareResume() {
     if (!String(rawText || '').trim()) throw new Error('No resume text was found. Try a searchable PDF or paste its text.');
     if (rawText.length > 60000) throw new Error('The extracted resume is too long to process safely. Use a shorter resume or paste the relevant sections.');
 
-    const { sectionizeResumeText, findResumePii } = await import(chrome.runtime.getURL('utils/resume.js'));
+    const { sectionizeResumeText, findResumePii } = await import(chrome.runtime.getURL('src/utils/resume.js'));
     const localName = document.getElementById('user-name').value.trim();
     const result = sectionizeResumeText(rawText, { name: localName });
     preparedResumeIdentity = {
@@ -620,7 +664,7 @@ async function updateBuildMemoryCardAvailability() {
   try {
     const sections = JSON.parse(document.getElementById('resume-sanitized-json').value || '{}');
     const localName = preparedResumeIdentity.name || document.getElementById('user-name').value.trim();
-    const { assertResumeSectionsSafe } = await import(chrome.runtime.getURL('utils/resume.js'));
+    const { assertResumeSectionsSafe } = await import(chrome.runtime.getURL('src/utils/resume.js'));
     const sanitized = assertResumeSectionsSafe(sections, {
       name: localName,
       names: [preparedResumeIdentity.name]
@@ -639,7 +683,7 @@ async function handleBuildMemoryCard() {
   button.disabled = true;
   try {
     const sections = JSON.parse(document.getElementById('resume-sanitized-json').value || '{}');
-    const { assertResumeSectionsSafe } = await import(chrome.runtime.getURL('utils/resume.js'));
+    const { assertResumeSectionsSafe } = await import(chrome.runtime.getURL('src/utils/resume.js'));
     const safeSections = assertResumeSectionsSafe(sections, {
       name: preparedResumeIdentity.name || document.getElementById('user-name').value.trim(),
       names: [preparedResumeIdentity.name]
@@ -854,7 +898,7 @@ async function handleClearAllData() {
 
 function loadStoredSettings() {
   return new Promise(resolve => {
-    chrome.storage.local.get(['userApiKey','userName','userBio','resumeBase64','resumeFileName'], resolve);
+    chrome.storage.local.get(['userApiKey', 'userName', 'userBio', 'resumeBase64', 'resumeFileName'], resolve);
   });
 }
 

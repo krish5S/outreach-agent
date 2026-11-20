@@ -94,7 +94,7 @@
             <div class="layer-badge l1">L1</div>
             <div class="layer-info">
               <div class="layer-title">Memory</div>
-              <div class="layer-desc">Resume-to-profile matching will be added later.</div>
+              <div class="layer-desc">Finds relevant overlaps between your resume card and this profile.</div>
             </div>
             <div class="layer-status-wrap">
               <div class="status-dot" id="l1-dot"></div>
@@ -105,7 +105,7 @@
             <div class="layer-badge l2">L2</div>
             <div class="layer-info">
               <div class="layer-title">Company</div>
-              <div class="layer-desc">Company research will be added later.</div>
+              <div class="layer-desc">Company news matching is planned for Step 4.</div>
             </div>
             <div class="layer-status-wrap">
               <div class="status-dot" id="l2-dot"></div>
@@ -116,7 +116,7 @@
             <div class="layer-badge l3">L3</div>
             <div class="layer-info">
               <div class="layer-title">Approach</div>
-              <div class="layer-desc">Returns a clearly labelled placeholder draft in Step 1.</div>
+              <div class="layer-desc">Draft strategy and writing are planned for Steps 5–6.</div>
             </div>
             <div class="layer-status-wrap">
               <div class="status-dot" id="l3-dot"></div>
@@ -159,9 +159,13 @@
         </button>
 
         <div class="deep-result hidden" id="deep-result">
-          <div class="deep-result-title">Step 1 placeholder result</div>
-          <div class="deep-result-note">This confirms the pipeline is connected. Matching, company research, and personalized drafting come in later steps.</div>
+          <div class="deep-result-title">Step 3 results</div>
+          <div class="deep-result-note">Layer 1 matches appear below. Company intelligence and personalized message drafting are added in later steps.</div>
           <textarea id="deep-draft" class="deep-draft-preview" rows="3" readonly></textarea>
+          <section class="memory-match-panel" aria-labelledby="memory-match-title">
+            <h3 id="memory-match-title">Matches found</h3>
+            <div id="memory-match-list" class="memory-match-list"></div>
+          </section>
         </div>
       </div>
 
@@ -270,7 +274,7 @@
         <div class="status-bar hidden" id="settings-status"></div>
 
         <div class="settings-note">
-          Profile details and your bio are sent to Groq when drafting messages. Resume PDFs and OCR stay on this device; only the sanitized resume section JSON you review is sent to Groq to build a memory card. Your professional history is still personal information.
+          Profile details and your bio are sent to Groq when drafting messages. Resume PDFs, OCR, and resume-to-profile matching stay on this device. Only the sanitized resume section JSON you review is sent to Groq to build a memory card.
         </div>
 
       </div>
@@ -278,7 +282,7 @@
 
   </div>
 
-  <script src="utils/cache.js"></script>
+  <script src="../utils/cache.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

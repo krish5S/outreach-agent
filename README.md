@@ -1,18 +1,43 @@
-# outreach-agent
+# Outreach Agent
 
-A Manifest V3 Chrome extension that uses profile details and recent posts to help draft personalized LinkedIn messages.
+A Manifest V3 Chrome extension that reads a LinkedIn profile and helps prepare personalized outreach. Quick Mode drafts a message; Deep Mode compares the profile with a locally saved resume card. Deep Mode’s later company research and personalized drafting layers are still planned.
 
-## Run locally
+## Run the extension
 
-1. Install the local PDF/OCR runtime files: `npm install`.
-2. Open `chrome://extensions`, enable Developer mode, and choose **Load unpacked**.
-3. Select this project folder.
-4. Add a Groq API key in the extension Settings to use AI message drafting and resume-to-memory-card conversion.
+1. Install the local PDF and OCR dependencies with `npm ci`.
+2. Open `chrome://extensions` and enable **Developer mode**.
+3. Choose **Load unpacked** and select this repository’s root folder (the folder containing `manifest.json`).
+4. Open a LinkedIn profile and click the extension.
 
-## Resume privacy
+Add a Groq API key in **Settings** to structure a resume card and run Deep Mode. Layer 1 uses local keyword matching; it does not need a separate embeddings provider, model, or API key. Quick Mode remains available independently.
 
-PDF text extraction and OCR run in the extension using locally installed PDF.js and Tesseract.js assets. The name and headline are detected from the resume header on-device (the name can also come from Settings); both stay local and are excluded from the section JSON sent to Groq. The extension also removes detected email addresses, phone numbers, and common street-address patterns. You review the JSON before sending it; automatic checks can miss details. Skills, education, projects, and work history remain personal information and are sent to Groq for structuring. New PDFs and raw extracted text are not saved in extension storage. A PDF saved by an older version is deleted after its converted memory card is saved.
+## Project map
 
-## Automated checks
+```text
+manifest.json          Chrome extension entry point and permissions
+src/
+  background.js        Extension service worker and message routing
+  content_script.js    LinkedIn profile extraction
+  popup/               Extension interface (HTML, CSS, and browser logic)
+  layers/              Deep Mode pipeline and layer implementations
+  utils/               Storage, resume processing, facts, matching, and API helpers
+assets/icons/          Extension icons
+tests/                 Automated tests and sample profile fixtures
+scripts/               Local development reports
+docs/                  Architecture and data-flow guide
+```
 
-Run `npm test` for the built-in Node test suite.
+For the responsibilities and data flow, see [docs/architecture.md](docs/architecture.md).
+
+## Development checks
+
+```sh
+npm test
+node scripts/score-report.mjs
+```
+
+## Data and privacy
+
+Resume PDFs and OCR run locally. Detected name and headline stay local; recognized email, phone, and common street-address patterns are removed before resume sections are sent to Groq for memory-card structuring. Review the sanitized sections before submitting them. The saved resume card remains in extension storage.
+
+Resume-to-profile matching and its cached keyword vectors stay on-device. No resume or viewed-profile facts are sent to an embeddings service. Resume section JSON is sent to Groq only after local redaction and user review to build the memory card; profile details and bio are sent to Groq when drafting messages. API keys are stored in the extension’s local Chrome storage.

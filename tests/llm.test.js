@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { callModel, NoApiKey, Http, BadJson } from '../utils/llm.js';
+import { callModel, NoApiKey, Http, BadJson } from '../src/utils/llm.js';
 
 function fakeResponse(data, status = 200) {
   return {

@@ -1,17 +1,16 @@
-const DEFAULT_DRAFT = 'Placeholder draft: Deep Mode is connected. Personalized outreach logic will be added in later steps.';
+import { runMemoryLayer } from './memory.js';
+
+const DEFAULT_DRAFT = 'Placeholder draft: personalized message writing is planned for Steps 5–6.';
 
 export const stubLayers = Object.freeze({
-  memory: async () => ({
-    status: 'skipped',
-    detail: 'Resume-to-profile matching is a placeholder in Step 1.'
-  }),
+  memory: async (ctx) => runMemoryLayer(ctx),
   company: async () => ({
     status: 'skipped',
-    detail: 'Company research is a placeholder in Step 1.'
+    detail: 'Company intelligence is planned for Step 4.'
   }),
   approach: async () => ({
     status: 'done',
-    detail: 'Placeholder draft returned; personalized writing is added later.',
+    detail: 'Placeholder draft returned; personalized writing is planned for Steps 5–6.',
     draft: DEFAULT_DRAFT
   })
 });
@@ -42,6 +41,7 @@ export async function runDeepPipeline(ctx = {}, { emit = async () => {}, layers 
       layerResults[layer] = { status, detail };
       if (output?.cached !== undefined) layerResults[layer].cached = output.cached;
       if (output?.draft) layerResults[layer].draft = output.draft;
+      if (Array.isArray(output?.matches)) layerResults[layer].matches = output.matches;
       await emit({ type: 'progress', layer, status, detail });
     } catch (error) {
       const detail = error?.message || 'Layer failed.';
@@ -63,14 +63,14 @@ export async function runDeepPipeline(ctx = {}, { emit = async () => {}, layers 
     profileUrl: profile.profileUrl || '',
     startedAt,
     layers: layerResults,
-    matches: [],
+    matches: layerResults.memory?.matches || [],
     strategy: {
       mode: 'fallback',
-      primary: { evidenceIds: [], angle: 'Step 1 placeholder' },
+      primary: { evidenceIds: [], angle: 'Layer 3 placeholder' },
       supporting: [],
       askSize: 'small',
       tone: 'neutral',
-      rationale: 'Personalized strategy is not implemented in the Step 1 skeleton.'
+      rationale: 'Personalized strategy is planned for Steps 5–6.'
     },
     drafts: [draft],
     critique: null,

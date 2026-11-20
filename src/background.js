@@ -3,11 +3,13 @@ import { createChromeStorage } from './utils/storage.js';
 import { CONFIG } from './utils/config.js';
 import { callModel } from './utils/llm.js';
 import { buildMemoryCard, validateMemoryCard } from './layers/memory.js';
+import { embed } from './utils/embeddings.js';
 import { sanitizeGeneratedMessage } from './utils/message.js';
 
 'use strict';
 
 const extensionStorage = createChromeStorage();
+const storageMigration = extensionStorage.clearDeprecatedEmbeddingData().catch(() => {});
 
 // background.js — Standalone version (assessment build)
 // No company server, no license key. Messages are generated locally for free.
@@ -114,6 +116,7 @@ async function handleDeepPortRun(port, payload, isConnected) {
   };
 
   try {
+    await storageMigration;
     await extensionStorage.setSession({ [storageKey]: baseRunState });
     const settings = await extensionStorage.getSettings();
     if (!String(settings.userApiKey || '').trim()) {
@@ -128,6 +131,7 @@ async function handleDeepPortRun(port, payload, isConnected) {
     const result = await runDeepPipeline({
       ...payload,
       profileJSON: profile,
+      storage: extensionStorage,
       runId,
       startedAt
     }, {
@@ -180,7 +184,7 @@ async function handleScrapeProfile(sendResponse) {
     try {
       result = await chrome.tabs.sendMessage(tab.id, { action: 'scrapeProfile' });
     } catch (_) {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content_script.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['src/content_script.js'] });
       await delay(400);
       result = await chrome.tabs.sendMessage(tab.id, { action: 'scrapeProfile' });
     }
@@ -209,6 +213,7 @@ async function handleTestKey({ apiKey }, sendResponse) {
 
 async function handleBuildMemoryCard({ sections }, sendResponse) {
   try {
+    await storageMigration;
     const settings = await extensionStorage.getSettings();
     if (!String(settings.userApiKey || '').trim()) {
       throw new Error('Add and save your Groq API key in Settings to build a memory card.');
@@ -225,6 +230,7 @@ async function handleBuildMemoryCard({ sections }, sendResponse) {
 
 async function handleGetMemoryCard(sendResponse) {
   try {
+    await storageMigration;
     sendResponse({ success: true, data: await extensionStorage.getMemoryCard() });
   } catch (error) {
     sendResponse({ success: false, error: error?.message || 'Could not load the memory card.' });
@@ -233,7 +239,13 @@ async function handleGetMemoryCard(sendResponse) {
 
 async function handleSaveMemoryCard({ card }, sendResponse) {
   try {
+    await storageMigration;
     const safeCard = validateMemoryCard(card, { name: card?.name || '' });
+    await embed(safeCard.facts.map((fact) => fact.text), {
+      backend: 'keyword',
+      kind: 'fact',
+      storage: extensionStorage
+    });
     await extensionStorage.setMemoryCard(safeCard);
     await extensionStorage.clearLegacyResume();
     sendResponse({ success: true, data: safeCard });

@@ -86,6 +86,20 @@ export function createStorage({ localArea, sessionArea } = {}) {
     async clearLegacyResume() {
       return localRemove([STORAGE_KEYS.resumeBase64, STORAGE_KEYS.resumeFileName]);
     },
+    async clearDeprecatedEmbeddingData() {
+      const retiredKeys = ['embeddingApiKey', 'embeddingBackend'];
+      const values = await localGet([...retiredKeys, STORAGE_KEYS.vecCache]);
+      await localRemove(retiredKeys);
+      const cache = values[STORAGE_KEYS.vecCache];
+      if (cache && typeof cache === 'object' && !Array.isArray(cache)) {
+        const localVectors = Object.fromEntries(
+          Object.entries(cache).filter(([key]) => key.startsWith('keyword:local:'))
+        );
+        if (Object.keys(localVectors).length !== Object.keys(cache).length) {
+          await localSet({ [STORAGE_KEYS.vecCache]: localVectors });
+        }
+      }
+    },
     async clearAllData() {
       await localClear();
       if (session) await callStorageArea(session, 'clear');

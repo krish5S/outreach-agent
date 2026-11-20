@@ -7,6 +7,10 @@ export const CONFIG = Object.freeze({
     strong: 0.6,
     medium: 0.45
   }),
+  embeddings: Object.freeze({
+    vectorSize: 512,
+    maxCacheEntries: 500
+  }),
   limits: Object.freeze({
     factText: 200,
     maxFacts: 40,

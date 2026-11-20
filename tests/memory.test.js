@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMemoryCard, memoryCardToFacts, validateMemoryCard } from '../layers/memory.js';
+import { buildMemoryCard, memoryCardToFacts, runMemoryLayer, validateMemoryCard } from '../src/layers/memory.js';
 
 const sections = {
   summary: ['Software engineer interested in accessible applications.'],
@@ -82,4 +82,50 @@ test('memoryCardToFacts creates unique IDs and caps the collection at 40', () =>
   assert.equal(facts.length, 40);
   assert.equal(new Set(facts.map((fact) => fact.id)).size, facts.length);
   assert.equal(facts[0].id, 'M1');
+});
+
+test('runMemoryLayer returns exact school, employer, and named-skill matches', async () => {
+  const result = await runMemoryLayer({
+    memoryCard: {
+      headline: 'AI engineer',
+      skills: ['Python'],
+      education: [{ school: 'D. J. Sanghvi College of Engineering', degree: 'B.Tech' }],
+      experience: [{ title: 'Engineer', org: 'Acme Robotics', years: '2024–present', highlights: [] }]
+    },
+    profileJSON: {
+      currentCompany: 'Acme Robotics',
+      educationEntries: [{ school: 'D. J. Sanghvi College of Engineering' }],
+      skills: ['Python']
+    }
+  });
+
+  assert.equal(result.status, 'done');
+  assert.ok(result.matches.some((match) => match.exact && match.tier === 'strong' && /Sanghvi/.test(match.meText)));
+  assert.ok(result.matches.some((match) => match.exact && match.tier === 'strong' && /Acme Robotics/.test(match.meText)));
+  assert.ok(result.matches.some((match) => match.exact && match.tier === 'strong' && /Python/.test(match.meText)));
+});
+
+test('runMemoryLayer skips cleanly when there is no resume memory card', async () => {
+  const result = await runMemoryLayer({ profileJSON: { skills: ['Python'] } });
+  assert.equal(result.status, 'skipped');
+  assert.deepEqual(result.matches, []);
+});
+
+test('profile contact details are stripped locally before fact embeddings are requested', async () => {
+  let embeddedText = [];
+  await runMemoryLayer({
+    memoryCard: { skills: ['Python'] },
+    profileJSON: {
+      about: 'Email me at person@example.test. Call +1 (415) 555-0138.',
+      recentPosts: ['Visit me at 123 Market Street.']
+    }
+  }, {
+    embedder: async (texts) => {
+      embeddedText = texts;
+      return texts.map(() => [1, 0]);
+    }
+  });
+
+  assert.ok(embeddedText.length > 0);
+  assert.ok(embeddedText.every((text) => !/person@example\.test|415|Market Street/i.test(text)));
 });
