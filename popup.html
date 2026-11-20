@@ -228,21 +228,49 @@
             placeholder="Brief professional summary — used to personalize messages."></textarea>
         </div>
 
-        <div class="field-group full">
-          <label class="field-label">Your Resume (PDF)</label>
+        <div class="resume-card-section">
+          <div class="resume-card-heading">Resume memory card</div>
+          <p class="resume-privacy-copy">The PDF and OCR stay on this device. The name is detected from the header (or taken from Your Name in Settings), and the headline is read from the header; both stay local and are excluded from the JSON sent to Groq. Email, phone, and detected addresses are also removed locally. Review the preview for details automatic checks may miss.</p>
+          <p class="resume-privacy-copy">The section JSON sent to Groq still contains career details such as skills, education, and work history. These can identify you.</p>
+
+          <label class="field-label" for="resume-upload">Upload a PDF</label>
           <div class="file-upload-area" id="file-upload-area">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span id="file-label">Click to upload or drag PDF here</span>
-            <input id="resume-upload" type="file" accept=".pdf" class="file-input" />
+            <span id="file-label">Choose or drop a PDF (max 10 MB)</span>
+            <input id="resume-upload" type="file" accept="application/pdf,.pdf" class="file-input" />
           </div>
-          <div class="resume-status hidden" id="resume-status"></div>
+
+          <label class="field-label resume-paste-label" for="resume-text-input">Or paste resume text</label>
+          <textarea id="resume-text-input" class="field-textarea" rows="5" placeholder="Paste resume text here. It will be redacted and sectioned locally before any Groq request."></textarea>
+          <button id="prepare-resume-btn" class="btn btn-secondary btn-full">Extract and review sections</button>
+          <button id="convert-legacy-resume-btn" class="btn btn-secondary btn-full hidden">Convert previously saved PDF</button>
+          <div class="resume-status hidden" id="resume-status" role="status"></div>
+
+          <section class="resume-review hidden" id="resume-review">
+            <label class="field-label" for="resume-sanitized-json">Sanitized section JSON sent to Groq</label>
+            <textarea id="resume-sanitized-json" class="field-textarea resume-json-preview" rows="9" spellcheck="false"></textarea>
+            <div class="resume-redaction-count" id="resume-redaction-count"></div>
+            <label class="resume-consent-row"><input id="resume-review-confirm" type="checkbox" /> I reviewed this JSON and confirmed it contains no name, email, phone number, or address.</label>
+            <button id="build-memory-card-btn" class="btn btn-primary btn-full" disabled>Structure memory card with Groq</button>
+          </section>
+
+          <section class="memory-card-editor hidden" id="memory-card-editor">
+            <div class="resume-card-heading">Review and edit your card</div>
+            <div id="memory-card-fields"></div>
+            <div class="memory-card-actions">
+              <button id="save-memory-card-btn" class="btn btn-primary">Save card</button>
+              <button id="reset-memory-card-btn" class="btn btn-secondary">Reset edits</button>
+            </div>
+          </section>
+
+          <button id="clear-all-data-btn" class="btn-ghost clear-all-data-btn">Clear all my data</button>
         </div>
 
         <button id="save-settings-btn" class="btn btn-primary btn-full">Save Settings</button>
         <div class="status-bar hidden" id="settings-status"></div>
 
         <div class="settings-note">
-          Settings and the uploaded PDF stay on your device. In AI Mode, profile details and your bio are sent to Groq to draft a message.
+          Profile details and your bio are sent to Groq when drafting messages. Resume PDFs and OCR stay on this device; only the sanitized resume section JSON you review is sent to Groq to build a memory card. Your professional history is still personal information.
         </div>
 
       </div>

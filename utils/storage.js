@@ -76,6 +76,16 @@ export function createStorage({ localArea, sessionArea } = {}) {
       }
       return localSet(values);
     },
+    async getMemoryCard() {
+      const values = await localGet(STORAGE_KEYS.memoryCard);
+      return values[STORAGE_KEYS.memoryCard] || null;
+    },
+    async setMemoryCard(card) {
+      return localSet({ [STORAGE_KEYS.memoryCard]: card });
+    },
+    async clearLegacyResume() {
+      return localRemove([STORAGE_KEYS.resumeBase64, STORAGE_KEYS.resumeFileName]);
+    },
     async clearAllData() {
       await localClear();
       if (session) await callStorageArea(session, 'clear');

@@ -2,6 +2,8 @@ import { runDeepPipeline } from './layers/pipeline.js';
 import { createChromeStorage } from './utils/storage.js';
 import { CONFIG } from './utils/config.js';
 import { callModel } from './utils/llm.js';
+import { buildMemoryCard, validateMemoryCard } from './layers/memory.js';
+import { sanitizeGeneratedMessage } from './utils/message.js';
 
 'use strict';
 
@@ -26,6 +28,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'TEST_API_KEY') {
     handleTestKey(message.payload, sendResponse);
+    return true;
+  }
+
+  if (message.type === 'BUILD_MEMORY_CARD') {
+    handleBuildMemoryCard(message.payload, sendResponse);
+    return true;
+  }
+
+  if (message.type === 'GET_MEMORY_CARD') {
+    handleGetMemoryCard(sendResponse);
+    return true;
+  }
+
+  if (message.type === 'SAVE_MEMORY_CARD') {
+    handleSaveMemoryCard(message.payload, sendResponse);
+    return true;
+  }
+
+  if (message.type === 'CLEAR_ALL_DATA') {
+    handleClearAllData(sendResponse);
     return true;
   }
 
@@ -185,6 +207,50 @@ async function handleTestKey({ apiKey }, sendResponse) {
   }
 }
 
+async function handleBuildMemoryCard({ sections }, sendResponse) {
+  try {
+    const settings = await extensionStorage.getSettings();
+    if (!String(settings.userApiKey || '').trim()) {
+      throw new Error('Add and save your Groq API key in Settings to build a memory card.');
+    }
+    const card = await buildMemoryCard(sections, {
+      apiKey: settings.userApiKey,
+      name: settings.userName
+    });
+    sendResponse({ success: true, data: card });
+  } catch (error) {
+    sendResponse({ success: false, error: error?.message || 'Could not build the memory card.' });
+  }
+}
+
+async function handleGetMemoryCard(sendResponse) {
+  try {
+    sendResponse({ success: true, data: await extensionStorage.getMemoryCard() });
+  } catch (error) {
+    sendResponse({ success: false, error: error?.message || 'Could not load the memory card.' });
+  }
+}
+
+async function handleSaveMemoryCard({ card }, sendResponse) {
+  try {
+    const safeCard = validateMemoryCard(card, { name: card?.name || '' });
+    await extensionStorage.setMemoryCard(safeCard);
+    await extensionStorage.clearLegacyResume();
+    sendResponse({ success: true, data: safeCard });
+  } catch (error) {
+    sendResponse({ success: false, error: error?.message || 'Could not save the memory card.' });
+  }
+}
+
+async function handleClearAllData(sendResponse) {
+  try {
+    await extensionStorage.clearAllData();
+    sendResponse({ success: true });
+  } catch (error) {
+    sendResponse({ success: false, error: error?.message || 'Could not clear extension data.' });
+  }
+}
+
 // ─── Quick Mode generate ──────────────────────────────────────────────────────
 async function handleQuickGenerate(data, sendResponse) {
   try {
@@ -300,13 +366,15 @@ Recipient profile: ${JSON.stringify({
   })}
 Personalisation hooks: ${hooks.join(' | ')}
 Sender name: ${settings.userName || '(not given)'}. Sender bio: ${settings.userBio || '(not given)'}.
+If the sender name is not given, omit the sender name and do not write placeholders such as [Your Name] or [Name]. If it is given, use it exactly as written.
 Return only the message text, nothing else.`;
-  return (await callModel({
+  const message = await callModel({
     apiKey,
     model: CONFIG.models.fast,
     messages: [{ role: 'user', content: prompt }],
     maxTokens: 800
-  })).trim();
+  });
+  return sanitizeGeneratedMessage(message, settings.userName);
 }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────

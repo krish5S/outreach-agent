@@ -8,6 +8,9 @@ let isDeepRunning      = false;
 let activeProfileAvailable = false;
 let deepRunPort        = null;
 let deepRunFinished    = false;
+let selectedResumeFile = null;
+let memoryCardOriginal = null;
+let preparedResumeIdentity = { name: '', headline: '' };
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -106,7 +109,6 @@ function wireSettingsEvents() {
     if (e.key === 'Enter') handleValidateKey();
   });
 
-  // Resume upload
   const dropArea = document.getElementById('file-upload-area');
   dropArea.addEventListener('click', () => document.getElementById('resume-upload').click());
   dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('drag-over'); });
@@ -121,6 +123,15 @@ function wireSettingsEvents() {
     const file = e.target.files[0];
     if (file) processResumeFile(file);
   });
+  document.getElementById('prepare-resume-btn').addEventListener('click', handlePrepareResume);
+  document.getElementById('convert-legacy-resume-btn').addEventListener('click', handleConvertLegacyResume);
+  document.getElementById('resume-review-confirm').addEventListener('change', updateBuildMemoryCardAvailability);
+  document.getElementById('resume-sanitized-json').addEventListener('input', updateBuildMemoryCardAvailability);
+  document.getElementById('user-name').addEventListener('input', updateBuildMemoryCardAvailability);
+  document.getElementById('build-memory-card-btn').addEventListener('click', handleBuildMemoryCard);
+  document.getElementById('save-memory-card-btn').addEventListener('click', handleSaveMemoryCard);
+  document.getElementById('reset-memory-card-btn').addEventListener('click', handleResetMemoryCard);
+  document.getElementById('clear-all-data-btn').addEventListener('click', handleClearAllData);
 }
 
 function wireRecentEvents() {
@@ -294,13 +305,20 @@ async function loadSettings() {
   if (s.userApiKey) document.getElementById('api-key').value = s.userApiKey;
   if (s.userName)   document.getElementById('user-name').value   = s.userName;
   if (s.userBio)    document.getElementById('user-bio').value    = s.userBio;
-  if (s.resumeFileName) {
+  if (s.resumeBase64) {
     document.getElementById('file-label').textContent = s.resumeFileName;
     document.getElementById('file-upload-area').classList.add('has-file');
     const statusEl = document.getElementById('resume-status');
-    statusEl.textContent = `${s.resumeFileName} saved ✓`;
-    statusEl.className   = 'resume-status success';
+    statusEl.textContent = 'An older saved PDF can be converted locally. It will be deleted after you save its memory card.';
+    statusEl.className   = 'resume-status pending';
     statusEl.classList.remove('hidden');
+    document.getElementById('convert-legacy-resume-btn').classList.remove('hidden');
+  }
+  try {
+    const savedCard = await sendToBackground({ type: 'GET_MEMORY_CARD' });
+    if (savedCard) renderMemoryCardEditor(savedCard);
+  } catch (error) {
+    showResumeStatus(error.message, 'error');
   }
 }
 
@@ -310,14 +328,6 @@ async function handleSaveSettings() {
   const userBio    = document.getElementById('user-bio').value.trim();
 
   const savePayload = { userApiKey, userName, userBio };
-  if (pendingResume) {
-    savePayload.resumeBase64   = pendingResume.base64;
-    savePayload.resumeFileName = pendingResume.fileName;
-    pendingResume = null;
-    const statusEl = document.getElementById('resume-status');
-    statusEl.textContent = 'Resume saved ✓';
-    statusEl.className   = 'resume-status success';
-  }
   await new Promise(resolve => chrome.storage.local.set(savePayload, resolve));
   showSettingsStatus('Settings saved!', 'success');
   await checkLicenseStatus();
@@ -498,43 +508,348 @@ function sendToBackground(msg) {
 }
 
 // ─── Resume upload ────────────────────────────────────────────────────────────
-let pendingResume = null;
+function showResumeStatus(message, type = 'pending') {
+  const statusEl = document.getElementById('resume-status');
+  statusEl.textContent = message;
+  statusEl.className = 'resume-status ' + type;
+  statusEl.classList.remove('hidden');
+}
 
 function processResumeFile(file) {
-  const statusEl  = document.getElementById('resume-status');
-  const dropArea  = document.getElementById('file-upload-area');
-  const fileLabel = document.getElementById('file-label');
-
-  if (file.type !== 'application/pdf') {
-    statusEl.textContent = 'Please upload a PDF file.';
-    statusEl.className   = 'resume-status error';
-    statusEl.classList.remove('hidden');
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !String(file.name || '').toLowerCase().endsWith('.pdf')) {
+    showResumeStatus('Please choose a PDF file.', 'error');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showResumeStatus('Resume PDF is too large. The limit is 10 MB.', 'error');
     return;
   }
 
-  if (file.size > 4 * 1024 * 1024) {
-    statusEl.textContent = 'File too large — max 4MB.';
-    statusEl.className   = 'resume-status error';
-    statusEl.classList.remove('hidden');
-    return;
-  }
+  selectedResumeFile = file;
+  preparedResumeIdentity = { name: '', headline: '' };
+  document.getElementById('file-label').textContent = file.name || 'Resume PDF selected';
+  document.getElementById('file-upload-area').classList.add('has-file');
+  document.getElementById('resume-text-input').value = '';
+  document.getElementById('resume-review').classList.add('hidden');
+  document.getElementById('resume-review-confirm').checked = false;
+  updateBuildMemoryCardAvailability();
+  showResumeStatus('PDF selected. Extract and review the sanitized sections to continue.', 'pending');
+}
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const base64 = e.target.result.split(',')[1];
-    pendingResume = { base64, fileName: file.name };
-    fileLabel.textContent = file.name;
-    dropArea.classList.add('has-file');
-    statusEl.textContent  = `${file.name} ready — click Save Settings to confirm.`;
-    statusEl.className    = 'resume-status pending';
-    statusEl.classList.remove('hidden');
+async function handlePrepareResume() {
+  const button = document.getElementById('prepare-resume-btn');
+  button.disabled = true;
+  preparedResumeIdentity = { name: '', headline: '' };
+  document.getElementById('resume-review').classList.add('hidden');
+  showResumeStatus('Reading resume locally…', 'pending');
+  try {
+    let rawText = document.getElementById('resume-text-input').value;
+    if (selectedResumeFile) {
+      const { extractPdfText } = await import(chrome.runtime.getURL('utils/pdf.js'));
+      rawText = await extractPdfText(selectedResumeFile, {
+        onProgress: ({ phase, page, total, progress }) => {
+          if (phase === 'ocr') showResumeStatus(`Running local OCR on page ${page} of ${total} (${Math.round((progress || 0) * 100)}%)…`, 'pending');
+          else if (phase === 'extract') showResumeStatus(`Extracting page ${page} of ${total} locally…`, 'pending');
+          else if (phase === 'ocr-start') showResumeStatus(`Preparing local OCR for page ${page} of ${total}…`, 'pending');
+        }
+      });
+    }
+    if (!String(rawText || '').trim()) throw new Error('No resume text was found. Try a searchable PDF or paste its text.');
+    if (rawText.length > 60000) throw new Error('The extracted resume is too long to process safely. Use a shorter resume or paste the relevant sections.');
+
+    const { sectionizeResumeText, findResumePii } = await import(chrome.runtime.getURL('utils/resume.js'));
+    const localName = document.getElementById('user-name').value.trim();
+    const result = sectionizeResumeText(rawText, { name: localName });
+    preparedResumeIdentity = {
+      name: result.identity.name,
+      headline: result.identity.headline
+    };
+    const findings = findResumePii(result.sections, {
+      name: localName,
+      names: [result.identity.name, result.identity.detectedName]
+    });
+    document.getElementById('resume-sanitized-json').value = JSON.stringify(result.sections, null, 2);
+    const counts = Object.entries(result.redactions)
+      .filter(([, count]) => count > 0)
+      .map(([kind, count]) => `${kind}: ${count}`);
+    const identityStatus = `Local header check — name ${result.identity.name ? 'available' : 'not found'}, headline ${result.identity.headline ? 'found' : 'not found'}.`;
+    document.getElementById('resume-redaction-count').textContent = counts.length
+      ? `${identityStatus} Removed locally — ${counts.join(', ')}`
+      : `${identityStatus} No contact details were detected for removal.`;
+    document.getElementById('resume-review').classList.remove('hidden');
+    document.getElementById('resume-review-confirm').checked = false;
+    document.getElementById('resume-text-input').value = '';
+    selectedResumeFile = null;
+    document.getElementById('resume-upload').value = '';
+    updateBuildMemoryCardAvailability();
+    if (findings.length) {
+      showResumeStatus('Potential contact details remain. Remove them from the JSON preview before sending.', 'error');
+    } else {
+      showResumeStatus('Text extraction and PII checks ran locally. Review the JSON before sending it to Groq.', 'success');
+    }
+  } catch (error) {
+    showResumeStatus(error?.message || 'Could not process this resume.', 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function handleConvertLegacyResume() {
+  try {
+    const settings = await loadStoredSettings();
+    if (!settings.resumeBase64) throw new Error('No older saved resume was found.');
+    const binary = atob(settings.resumeBase64);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const file = new File([bytes], settings.resumeFileName || 'saved-resume.pdf', { type: 'application/pdf' });
+    processResumeFile(file);
+    await handlePrepareResume();
+  } catch (error) {
+    showResumeStatus(error?.message || 'Could not convert the previously saved PDF.', 'error');
+  }
+}
+
+let privacyCheckSequence = 0;
+
+async function updateBuildMemoryCardAvailability() {
+  const button = document.getElementById('build-memory-card-btn');
+  if (!button) return;
+  const checkSequence = ++privacyCheckSequence;
+  button.disabled = true;
+  let safe = false;
+  try {
+    const sections = JSON.parse(document.getElementById('resume-sanitized-json').value || '{}');
+    const localName = preparedResumeIdentity.name || document.getElementById('user-name').value.trim();
+    const { assertResumeSectionsSafe } = await import(chrome.runtime.getURL('utils/resume.js'));
+    const sanitized = assertResumeSectionsSafe(sections, {
+      name: localName,
+      names: [preparedResumeIdentity.name]
+    });
+    safe = Object.values(sanitized).some((items) => items.length);
+  } catch (_) {
+    safe = false;
+  }
+  if (checkSequence === privacyCheckSequence) {
+    button.disabled = !safe || !document.getElementById('resume-review-confirm').checked;
+  }
+}
+
+async function handleBuildMemoryCard() {
+  const button = document.getElementById('build-memory-card-btn');
+  button.disabled = true;
+  try {
+    const sections = JSON.parse(document.getElementById('resume-sanitized-json').value || '{}');
+    const { assertResumeSectionsSafe } = await import(chrome.runtime.getURL('utils/resume.js'));
+    const safeSections = assertResumeSectionsSafe(sections, {
+      name: preparedResumeIdentity.name || document.getElementById('user-name').value.trim(),
+      names: [preparedResumeIdentity.name]
+    });
+    if (!Object.values(safeSections).some((items) => items.length)) throw new Error('No resume sections contain text.');
+    showResumeStatus('Groq is structuring the sanitized sections…', 'pending');
+    const card = await sendToBackground({ type: 'BUILD_MEMORY_CARD', payload: { sections: safeSections } });
+    renderMemoryCardEditor({
+      ...card,
+      name: preparedResumeIdentity.name || card.name || document.getElementById('user-name').value.trim(),
+      headline: preparedResumeIdentity.headline || card.headline
+    });
+    showResumeStatus('Memory card ready to review. Save it to store it locally and remove any older saved PDF.', 'success');
+  } catch (error) {
+    showResumeStatus(error?.message || 'Could not build the memory card.', 'error');
+  } finally {
+    updateBuildMemoryCardAvailability();
+  }
+}
+
+function makeInput(value, placeholder, multiline = false) {
+  const element = document.createElement(multiline ? 'textarea' : 'input');
+  if (!multiline) element.type = 'text';
+  else element.rows = 3;
+  element.className = multiline ? 'field-textarea' : 'field-input';
+  element.value = String(value || '');
+  element.placeholder = placeholder || '';
+  return element;
+}
+
+function addScalarMemoryField(container, key, labelText, value, multiline = false) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'memory-card-field';
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  const input = makeInput(value, labelText, multiline);
+  input.dataset.memoryScalar = key;
+  wrapper.append(label, input);
+  container.append(wrapper);
+}
+
+function addRemoveButton(row, onRemove) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn-ghost';
+  button.textContent = 'Remove';
+  button.addEventListener('click', () => { row.remove(); });
+  return button;
+}
+
+function addSimpleListEditor(container, key, labelText, values = []) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'memory-card-field';
+  wrapper.dataset.memoryList = key;
+  const label = document.createElement('label');
+  label.textContent = labelText + ' (one item per row)';
+  const list = document.createElement('div');
+  list.className = 'memory-list-editor';
+  const addRow = (value = '') => {
+    const row = document.createElement('div');
+    row.className = 'memory-list-row';
+    row.dataset.simpleListRow = key;
+    const input = makeInput(value, labelText);
+    input.dataset.itemValue = 'true';
+    row.append(input, addRemoveButton(row));
+    list.append(row);
   };
-  reader.onerror = () => {
-    statusEl.textContent = 'Error reading file.';
-    statusEl.className   = 'resume-status error';
-    statusEl.classList.remove('hidden');
+  (Array.isArray(values) ? values : []).forEach((value) => addRow(value));
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'btn-ghost';
+  addButton.textContent = '+ Add ' + labelText.toLowerCase().replace(/s$/, '');
+  addButton.addEventListener('click', () => addRow());
+  wrapper.append(label, list, addButton);
+  container.append(wrapper);
+}
+
+function addObjectListEditor(container, key, labelText, values = [], fields = []) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'memory-card-field';
+  wrapper.dataset.memoryObjectList = key;
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  const list = document.createElement('div');
+  list.className = 'memory-list-editor';
+  const addRow = (value = {}) => {
+    const row = document.createElement('div');
+    row.className = 'memory-list-row';
+    row.dataset.objectListRow = key;
+    for (const field of fields) {
+      const input = makeInput(
+        Array.isArray(value[field.key]) ? value[field.key].join('\n') : value[field.key],
+        field.label,
+        field.multiline || field.array
+      );
+      input.dataset.objectField = field.key;
+      if (field.array) input.dataset.objectArray = 'true';
+      row.append(input);
+    }
+    row.append(addRemoveButton(row));
+    list.append(row);
   };
-  reader.readAsDataURL(file);
+  (Array.isArray(values) ? values : []).forEach((value) => addRow(value));
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'btn-ghost';
+  addButton.textContent = '+ Add ' + labelText.toLowerCase().replace(/s$/, '');
+  addButton.addEventListener('click', () => addRow());
+  wrapper.append(label, list, addButton);
+  container.append(wrapper);
+}
+
+function renderMemoryCardEditor(card = {}) {
+  const container = document.getElementById('memory-card-fields');
+  container.replaceChildren();
+  memoryCardOriginal = JSON.parse(JSON.stringify(card || {}));
+  addScalarMemoryField(container, 'name', 'Name (saved locally only)', card.name || document.getElementById('user-name').value, false);
+  addScalarMemoryField(container, 'headline', 'Headline', card.headline, false);
+  addScalarMemoryField(container, 'summary', 'Summary', card.summary, true);
+  addSimpleListEditor(container, 'skills', 'Skills', card.skills);
+  addObjectListEditor(container, 'education', 'Education', card.education, [
+    { key: 'school', label: 'School' }, { key: 'degree', label: 'Degree' },
+    { key: 'field', label: 'Field' }, { key: 'years', label: 'Years' }
+  ]);
+  addObjectListEditor(container, 'experience', 'Experience', card.experience, [
+    { key: 'title', label: 'Title' }, { key: 'org', label: 'Organization' },
+    { key: 'years', label: 'Years' }, { key: 'highlights', label: 'Highlights, one per line', array: true, multiline: true }
+  ]);
+  addObjectListEditor(container, 'projects', 'Projects', card.projects, [
+    { key: 'name', label: 'Project name' }, { key: 'summary', label: 'Summary', multiline: true },
+    { key: 'tech', label: 'Technology, one per line', array: true, multiline: true }
+  ]);
+  addSimpleListEditor(container, 'achievements', 'Achievements', card.achievements);
+  addScalarMemoryField(container, 'goals', 'Goals', card.goals, true);
+  addSimpleListEditor(container, 'interests', 'Interests', card.interests);
+  document.getElementById('memory-card-editor').classList.remove('hidden');
+}
+
+function collectMemoryCardFromEditor() {
+  const container = document.getElementById('memory-card-fields');
+  const result = { version: 1 };
+  container.querySelectorAll('[data-memory-scalar]').forEach((input) => {
+    result[input.dataset.memoryScalar] = input.value.trim();
+  });
+  container.querySelectorAll('[data-memory-list]').forEach((wrapper) => {
+    const key = wrapper.dataset.memoryList;
+    result[key] = [...wrapper.querySelectorAll(`[data-simple-list-row="${key}"] [data-item-value]`)]
+      .map((input) => input.value.trim()).filter(Boolean);
+  });
+  container.querySelectorAll('[data-memory-object-list]').forEach((wrapper) => {
+    const key = wrapper.dataset.memoryObjectList;
+    result[key] = [...wrapper.querySelectorAll(`[data-object-list-row="${key}"]`)].map((row) => {
+      const entry = {};
+      row.querySelectorAll('[data-object-field]').forEach((input) => {
+        const value = input.value.trim();
+        entry[input.dataset.objectField] = input.dataset.objectArray === 'true'
+          ? value.split('\n').map((line) => line.trim()).filter(Boolean)
+          : value;
+      });
+      return entry;
+    }).filter((entry) => Object.values(entry).some((value) => Array.isArray(value) ? value.length : value));
+  });
+  return result;
+}
+
+async function handleSaveMemoryCard() {
+  try {
+    const card = collectMemoryCardFromEditor();
+    const saved = await sendToBackground({ type: 'SAVE_MEMORY_CARD', payload: { card } });
+    renderMemoryCardEditor(saved);
+    document.getElementById('convert-legacy-resume-btn').classList.add('hidden');
+    showResumeStatus('Memory card saved locally. Any previously saved PDF data has been removed.', 'success');
+  } catch (error) {
+    showResumeStatus(error?.message || 'Could not save the memory card.', 'error');
+  }
+}
+
+function handleResetMemoryCard() {
+  renderMemoryCardEditor(memoryCardOriginal || {});
+}
+
+async function handleClearAllData() {
+  if (!confirm('Clear all extension data, including your API key, memory card, resume, and recent contacts?')) return;
+  try {
+    await sendToBackground({ type: 'CLEAR_ALL_DATA' });
+    document.getElementById('api-key').value = '';
+    document.getElementById('user-name').value = '';
+    document.getElementById('user-bio').value = '';
+    document.getElementById('resume-upload').value = '';
+    document.getElementById('resume-text-input').value = '';
+    document.getElementById('resume-sanitized-json').value = '';
+    document.getElementById('resume-review-confirm').checked = false;
+    document.getElementById('resume-redaction-count').textContent = '';
+    document.getElementById('file-label').textContent = 'Choose or drop a PDF (max 10 MB)';
+    document.getElementById('file-upload-area').classList.remove('has-file');
+    document.getElementById('resume-review').classList.add('hidden');
+    document.getElementById('memory-card-editor').classList.add('hidden');
+    document.getElementById('memory-card-fields').replaceChildren();
+    document.getElementById('convert-legacy-resume-btn').classList.add('hidden');
+    document.getElementById('resume-status').classList.add('hidden');
+    selectedResumeFile = null;
+    preparedResumeIdentity = { name: '', headline: '' };
+    memoryCardOriginal = null;
+    showSettingsStatus('All extension data cleared.', 'success');
+    await renderRecentContacts();
+    await checkLicenseStatus();
+    await updateDeepRunAvailability();
+  } catch (error) {
+    showResumeStatus(error?.message || 'Could not clear extension data.', 'error');
+  }
 }
 
 function loadStoredSettings() {

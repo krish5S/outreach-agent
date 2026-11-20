@@ -2,5 +2,10 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "pdfjs-dist": "6.5.438",
+    "tesseract.js": "7.0.0"
   }
 }
