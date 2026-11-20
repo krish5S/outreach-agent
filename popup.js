@@ -4,9 +4,10 @@
 let currentProfile     = null;
 let isGenerating       = false;
 let currentMode        = 'simple';
-let deepProfileJSON    = null;
-let deepEnrichmentJSON = null;
-let isEnriching        = false;
+let isDeepRunning      = false;
+let activeProfileAvailable = false;
+let deepRunPort        = null;
+let deepRunFinished    = false;
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -19,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   await renderRecentContacts();
   await checkLicenseStatus();
+  await updateDeepRunAvailability();
 });
 
 // ─── License key status in header ────────────────────────────────────────────
@@ -58,6 +60,7 @@ function setMode(mode) {
   document.getElementById('mode-deep').classList.toggle('active', mode === 'deep');
   document.getElementById('simple-mode-ui').classList.toggle('hidden', mode === 'deep');
   document.getElementById('deep-mode-ui').classList.toggle('hidden', mode === 'simple');
+  document.getElementById('quick-controls-row').classList.toggle('hidden', mode === 'deep');
   hideMessage();
   clearCurrentStatus();
 }
@@ -67,8 +70,9 @@ async function checkCurrentPage() {
   const tabs      = await chrome.tabs.query({ active: true, currentWindow: true });
   const tab       = tabs[0];
   const onProfile = tab && tab.url && /linkedin\.com\/in\/[^/?#]+/.test(tab.url);
+  activeProfileAvailable = Boolean(onProfile);
   document.getElementById('scrape-btn').disabled  = !onProfile;
-  document.getElementById('enrich-btn').disabled  = !onProfile;
+  document.getElementById('deep-run-btn').disabled = !onProfile || isDeepRunning;
   if (!onProfile) {
     document.getElementById('page-warning').classList.remove('hidden');
   } else {
@@ -77,11 +81,19 @@ async function checkCurrentPage() {
   return onProfile;
 }
 
+async function updateDeepRunAvailability() {
+  const settings = await loadStoredSettings();
+  const hasApiKey = Boolean((settings.userApiKey || '').trim());
+  const warning = document.getElementById('deep-key-warning');
+  warning.classList.toggle('hidden', hasApiKey);
+  document.getElementById('deep-run-btn').disabled =
+    !hasApiKey || !activeProfileAvailable || isDeepRunning;
+}
+
 // ─── Wire events ──────────────────────────────────────────────────────────────
 function wireCurrentEvents() {
   document.getElementById('scrape-btn').addEventListener('click', handleScrapeAndGenerate);
-  document.getElementById('enrich-btn').addEventListener('click', handleEnrich);
-  document.getElementById('deep-generate-btn').addEventListener('click', handleDeepGenerate);
+  document.getElementById('deep-run-btn').addEventListener('click', handleDeepRun);
   document.getElementById('regenerate-btn').addEventListener('click', handleRegenerate);
   document.getElementById('copy-btn').addEventListener('click', handleCopy);
   document.getElementById('generated-message').addEventListener('input', updateCharCount);
@@ -164,7 +176,7 @@ async function callQuickGenerate(profile) {
 
 async function handleRegenerate() {
   if (isGenerating) return;
-  if (currentMode === 'deep') { handleDeepGenerate(); return; }
+  if (currentMode === 'deep') { handleDeepRun(); return; }
   if (!currentProfile) return;
 
   isGenerating = true;
@@ -183,114 +195,97 @@ async function handleRegenerate() {
 }
 
 // ─── Deep Mode ────────────────────────────────────────────────────────────────
-async function handleEnrich() {
-  if (isEnriching) return;
+async function handleDeepRun() {
+  if (isDeepRunning) return;
 
-
-  deepProfileJSON = null;
-  deepEnrichmentJSON = null;
-  resetLayerStatuses();
-  document.getElementById('hooks-panel').classList.add('hidden');
-  document.getElementById('deep-generate-btn').disabled = true;
-  hideMessage();
-  clearCurrentStatus();
-
-  isEnriching = true;
-  setButtonLoading('enrich-btn', 'enrich-label', 'enrich-spinner', true, 'Scraping profile…');
-  setLayerStatus(1, 'running', 'Scraping…');
-
-  let rawProfileData;
-  try {
-    rawProfileData = await sendToBackground({ action: 'scrapeProfile' });
-  } catch (err) {
-    setLayerStatus(1, 'error', 'Failed');
-    showCurrentStatus('Could not scrape. Are you on a LinkedIn profile page?', 'error');
-    isEnriching = false;
-    setButtonLoading('enrich-btn', 'enrich-label', 'enrich-spinner', false, 'Scrape + Enrich (L1 + L2)');
+  const settings = await loadStoredSettings();
+  if (!(settings.userApiKey || '').trim()) {
+    showCurrentStatus('Add your Groq API key in Settings to enable Deep Mode.', 'warning');
+    return;
+  }
+  if (!await checkCurrentPage()) {
+    showCurrentStatus('Open a LinkedIn profile before running Deep Mode.', 'warning');
     return;
   }
 
-  currentProfile = rawProfileData;
-  renderProfileCard(rawProfileData);
-  setLayerStatus(1, 'running', 'Parsing…');
-  setButtonLoading('enrich-btn', 'enrich-label', 'enrich-spinner', true, 'Running AI layers…');
-  showCurrentStatus('Enriching…');
+  isDeepRunning = true;
+  deepRunFinished = false;
+  resetLayerStatuses();
+  document.getElementById('deep-result').classList.add('hidden');
+  document.getElementById('deep-draft').value = '';
+  hideMessage();
+  clearCurrentStatus();
+  setButtonLoading('deep-run-btn', 'deep-run-label', 'deep-run-spinner', true, 'Scraping profile…');
 
-  chrome.runtime.sendMessage({ type: 'RUN_ENRICH', payload: { rawProfileData } }, (response) => {
-    isEnriching = false;
-    setButtonLoading('enrich-btn', 'enrich-label', 'enrich-spinner', false, 'Scrape + Enrich (L1 + L2)');
+  try {
+    const profile = await sendToBackground({ action: 'scrapeProfile' });
+    currentProfile = profile;
+    renderProfileCard(profile);
+    setButtonLoading('deep-run-btn', 'deep-run-label', 'deep-run-spinner', true, 'Running layers…');
+    showCurrentStatus('Profile scraped. Starting the Deep Mode pipeline…');
 
-    if (chrome.runtime.lastError || !response) {
-      setLayerStatus(1, 'error', 'Error');
-      setLayerStatus(2, 'error', 'Error');
-      showCurrentStatus('Pipeline error. Check your connection.', 'error');
-      return;
-    }
-
-    if (response.status === 'error') {
-      setLayerStatus(1, 'error', 'Error');
-      setLayerStatus(2, 'error', 'Error');
-      showCurrentStatus(response.error, 'error');
-      return;
-    }
-
-    setLayerStatus(1, 'done', 'Done');
-    setLayerStatus(2, 'done', 'Done');
-    deepProfileJSON    = response.profileJSON;
-    deepEnrichmentJSON = response.enrichmentJSON;
-    renderProfileCard({ name: deepProfileJSON.name, headline: deepProfileJSON.headline, currentCompany: deepProfileJSON.currentCompany });
-    renderHooks(deepEnrichmentJSON);
-    setLayerStatus(3, '', 'Ready');
-    document.getElementById('deep-generate-btn').disabled = false;
-    showCurrentStatus('Enrichment done. Hit Generate Message.', 'success');
-  });
+    const port = chrome.runtime.connect({ name: 'deep-run' });
+    deepRunPort = port;
+    port.onMessage.addListener(handleDeepRunEvent);
+    port.onDisconnect.addListener(() => {
+      if (!deepRunFinished && deepRunPort === port) {
+        const error = chrome.runtime.lastError?.message || 'Deep Mode connection ended unexpectedly.';
+        finishDeepRun();
+        showCurrentStatus(error, 'error');
+      }
+    });
+    port.postMessage({
+      type: 'run',
+      payload: {
+        profileJSON: profile,
+        goal: document.getElementById('deep-goal').value,
+        messageType: document.getElementById('deep-message-type').value
+      }
+    });
+  } catch (error) {
+    finishDeepRun();
+    showCurrentStatus(error.message || 'Could not start the Deep Mode run.', 'error');
+  }
 }
 
-async function handleDeepGenerate() {
-  if (isGenerating || !deepProfileJSON || !deepEnrichmentJSON) return;
+function handleDeepRunEvent(event) {
+  if (event?.type === 'progress') {
+    const layerNumber = { memory: 1, company: 2, approach: 3 }[event.layer];
+    if (!layerNumber) return;
+    const isStarting = event.status === 'start';
+    setLayerStatus(
+      layerNumber,
+      isStarting ? 'running' : event.status,
+      isStarting ? 'Running' : (event.detail || event.status)
+    );
+    return;
+  }
 
-  isGenerating = true;
-  setButtonLoading('deep-generate-btn', 'deep-gen-label', 'deep-gen-spinner', true, 'Writing message…');
-  setLayerStatus(3, 'running', 'Writing…');
-  showCurrentStatus('Layer 3: writing message…');
-  hideMessage();
+  if (event?.type === 'result') {
+    const draft = event.result?.drafts?.[0]?.text || 'No placeholder draft was returned.';
+    document.getElementById('deep-draft').value = draft;
+    document.getElementById('deep-result').classList.remove('hidden');
+    finishDeepRun();
+    showCurrentStatus('Step 1 pipeline completed. This is a placeholder draft.', 'success');
+    return;
+  }
 
-  const messageType = document.getElementById('message-type').value;
-  const tone        = document.getElementById('tone').value;
+  if (event?.type === 'error') {
+    finishDeepRun();
+    showCurrentStatus(event.error || 'Deep Mode could not complete this run.', 'error');
+  }
+}
 
-  chrome.runtime.sendMessage(
-    { type: 'RUN_GENERATE', payload: { profileJSON: deepProfileJSON, enrichmentJSON: deepEnrichmentJSON, messageType, tone } },
-    async (response) => {
-      isGenerating = false;
-      setButtonLoading('deep-generate-btn', 'deep-gen-label', 'deep-gen-spinner', false, 'Generate Message (L3)');
-
-      if (chrome.runtime.lastError || !response) {
-        setLayerStatus(3, 'error', 'Error');
-        showCurrentStatus('Generation failed.', 'error');
-        return;
-      }
-
-      if (response.status === 'error') {
-        setLayerStatus(3, 'error', 'Error');
-        showCurrentStatus(response.error, 'error');
-        return;
-      }
-
-      setLayerStatus(3, 'done', 'Done');
-      renderMessage(response.generatedMessage);
-      const rem = response.remaining !== undefined ? ` (${response.remaining} messages left today)` : '';
-      showCurrentStatus(`Message ready.${rem}`, 'success');
-
-      await Cache.addContact({
-        profileUrl: deepProfileJSON.profileUrl || '',
-        name:       deepProfileJSON.name || 'Unknown',
-        headline:   deepProfileJSON.headline || '',
-        company:    deepProfileJSON.currentCompany || '',
-        message:    response.generatedMessage,
-        timestamp:  Date.now()
-      });
-    }
-  );
+function finishDeepRun() {
+  const port = deepRunPort;
+  deepRunPort = null;
+  deepRunFinished = true;
+  isDeepRunning = false;
+  setButtonLoading('deep-run-btn', 'deep-run-label', 'deep-run-spinner', false, 'Run Deep Mode');
+  if (port) {
+    try { port.disconnect(); } catch (_) {}
+  }
+  updateDeepRunAvailability();
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -326,6 +321,7 @@ async function handleSaveSettings() {
   await new Promise(resolve => chrome.storage.local.set(savePayload, resolve));
   showSettingsStatus('Settings saved!', 'success');
   await checkLicenseStatus();
+  await updateDeepRunAvailability();
 }
 
 async function handleValidateKey() {
@@ -352,6 +348,7 @@ async function handleValidateKey() {
     const s = await loadStoredSettings();
     await new Promise(resolve => chrome.storage.local.set({ ...s, userApiKey: apiKey }, resolve));
     await checkLicenseStatus();
+    await updateDeepRunAvailability();
   } else {
     el.textContent = `✗ ${result?.reason || 'Key did not work'}`;
     el.className   = 'key-validation-status invalid';
@@ -365,25 +362,7 @@ function setLayerStatus(layer, status, text) {
 }
 
 function resetLayerStatuses() {
-  [1,2].forEach(n => setLayerStatus(n, '', 'Ready'));
-  setLayerStatus(3, '', 'Waiting');
-}
-
-function renderHooks(enrichmentJSON) {
-  const panel = document.getElementById('hooks-panel');
-  const list  = document.getElementById('hooks-list');
-  list.innerHTML = '';
-  const hooks = enrichmentJSON.topHooks?.length
-    ? enrichmentJSON.topHooks
-    : (enrichmentJSON.companyNews || []).map(n => n.relevance || n.headline).filter(Boolean);
-  if (!hooks.length) return;
-  hooks.slice(0, 3).forEach(hook => {
-    const d = document.createElement('div');
-    d.className   = 'hook-item';
-    d.textContent = hook;
-    list.appendChild(d);
-  });
-  panel.classList.remove('hidden');
+  [1, 2, 3].forEach((number) => setLayerStatus(number, '', 'Ready'));
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -398,7 +377,9 @@ function renderProfileCard(data) {
 }
 
 function renderMessage(text) {
-  document.getElementById('generated-message').value = text;
+  const message = String(text || '').trim();
+  if (!message) throw new Error('No message was generated. Please try again.');
+  document.getElementById('generated-message').value = message;
   document.getElementById('message-section').classList.remove('hidden');
   updateCharCount();
 }

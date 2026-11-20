@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "name": "Ada Example",
+  "bio": "Software engineering student interested in robotics.",
+  "headline": "Software engineering student interested in robotics.",
+  "currentTitle": "Student Researcher",
+  "currentCompany": "Example Robotics Lab",
+  "location": "Example City",
+  "about": "I build small robotics projects and enjoy solving software problems. I am currently learning about computer vision.",
+  "experienceSectionContent": "Student Researcher\nExample Robotics Lab\n2025 - Present",
+  "educationSectionContent": "Example University\nBSc Computer Science",
+  "recentPosts": ["Our team built a small assistive robot for a class project."],
+  "recentPostSummaries": [{ "postNumber": 1, "summary": "Our team built a small assistive robot for a class project." }],
+  "experienceEntries": [{ "title": "Student Researcher", "company": "Example Robotics Lab", "employmentType": "Part-time", "duration": "2025 - Present", "isCurrent": true }],
+  "pastCompanies": [],
+  "educationEntries": ["Example University — BSc Computer Science"],
+  "skills": ["JavaScript", "Python", "Robotics"],
+  "profileUrl": "https://www.linkedin.com/in/ada-example/",
+  "rawTitle": "Ada Example | LinkedIn",
+  "scrapedAt": "2026-01-10T10:00:00.000Z"
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "name": "Riley Demo",
+  "bio": "Product designer focused on accessible tools.",
+  "headline": "Product designer focused on accessible tools.",
+  "currentTitle": "Product Designer",
+  "currentCompany": "Sample Design Co",
+  "location": "Demo Town",
+  "about": "I design accessible tools for community organizations. I work across research, prototyping, and front-end implementation. I care about clear language and inclusive design.",
+  "experienceSectionContent": "Product Designer\nSample Design Co\n2024 - Present\nDesign Intern\nDemo Studio\n2023 - 2024",
+  "educationSectionContent": "Demo Institute\nBA Design",
+  "recentPosts": [
+    "We shared an early prototype of an accessible community services directory.",
+    "A short note about testing designs with local residents."
+  ],
+  "recentPostSummaries": [
+    { "postNumber": 1, "summary": "We shared an early prototype of an accessible community services directory." },
+    { "postNumber": 2, "summary": "A short note about testing designs with local residents." }
+  ],
+  "experienceEntries": [
+    { "title": "Product Designer", "company": "Sample Design Co", "employmentType": null, "duration": "2024 - Present", "isCurrent": true },
+    { "title": "Design Intern", "company": "Demo Studio", "employmentType": "Internship", "duration": "2023 - 2024", "isCurrent": false }
+  ],
+  "pastCompanies": ["Demo Studio"],
+  "educationEntries": ["Demo Institute — BA Design"],
+  "skills": ["UX Research", "Prototyping", "Accessibility", "HTML", "CSS"],
+  "profileUrl": "https://www.linkedin.com/in/riley-demo/",
+  "rawTitle": "Riley Demo | LinkedIn",
+  "scrapedAt": "2026-01-10T10:00:00.000Z"
+}

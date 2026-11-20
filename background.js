@@ -1,11 +1,15 @@
+import { runDeepPipeline } from './layers/pipeline.js';
+import { createChromeStorage } from './utils/storage.js';
+import { CONFIG } from './utils/config.js';
+import { callModel } from './utils/llm.js';
+
 'use strict';
+
+const extensionStorage = createChromeStorage();
 
 // background.js — Standalone version (assessment build)
 // No company server, no license key. Messages are generated locally for free.
-// Optional: a user can paste THEIR OWN Anthropic API key in Settings to get AI-written messages.
-
-const ANTHROPIC_URL   = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_MODEL = 'claude-haiku-5-5';
+// Optional: a user can paste their own Groq API key in Settings to get AI-written messages.
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -53,6 +57,93 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Deep Mode uses a long-lived port so progress can be sent as each layer runs.
+// Existing one-shot messages remain in place for Quick Mode compatibility.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'deep-run') return;
+
+  let connected = true;
+  let running = false;
+  port.onDisconnect.addListener(() => { connected = false; });
+  port.onMessage.addListener((message) => {
+    if (message?.type !== 'run' || running) return;
+    running = true;
+    handleDeepPortRun(port, message.payload || {}, () => connected)
+      .finally(() => { running = false; });
+  });
+});
+
+async function handleDeepPortRun(port, payload, isConnected) {
+  const runId = 'run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  const startedAt = new Date().toISOString();
+  const profile = payload.profileJSON || {};
+  const storageKey = 'deepRun:' + runId;
+  const progressEvents = [];
+  const baseRunState = {
+    runId,
+    profileUrl: profile.profileUrl || '',
+    startedAt,
+    status: 'running'
+  };
+
+  const post = (event) => {
+    if (!isConnected()) return;
+    try { port.postMessage(event); } catch (_) {}
+  };
+
+  try {
+    await extensionStorage.setSession({ [storageKey]: baseRunState });
+    const settings = await extensionStorage.getSettings();
+    if (!String(settings.userApiKey || '').trim()) {
+      const error = 'Add your Groq API key in Settings to enable Deep Mode.';
+      await extensionStorage.setSession({
+        [storageKey]: { ...baseRunState, status: 'error', error }
+      });
+      post({ type: 'error', error });
+      return;
+    }
+
+    const result = await runDeepPipeline({
+      ...payload,
+      profileJSON: profile,
+      runId,
+      startedAt
+    }, {
+      emit: async (event) => {
+        progressEvents.push(event);
+        await extensionStorage.setSession({
+          [storageKey]: {
+            ...baseRunState,
+            status: 'running',
+            progress: progressEvents.slice(),
+            lastProgress: event,
+            updatedAt: new Date().toISOString()
+          }
+        });
+        post(event);
+      }
+    });
+
+    await extensionStorage.setSession({
+      [storageKey]: {
+        ...result,
+        status: 'complete',
+        progress: progressEvents,
+        updatedAt: new Date().toISOString()
+      }
+    });
+    post({ type: 'result', result });
+  } catch (error) {
+    const message = error?.message || 'Deep Mode could not complete this run.';
+    try {
+      await extensionStorage.setSession({
+        [storageKey]: { ...baseRunState, status: 'error', error: message }
+      });
+    } catch (_) {}
+    post({ type: 'error', error: message });
+  }
+}
+
 // ─── Scrape profile from active tab ───────────────────────────────────────────
 async function handleScrapeProfile(sendResponse) {
   try {
@@ -82,7 +173,12 @@ async function handleScrapeProfile(sendResponse) {
 // ─── Test user's own API key ──────────────────────────────────────────────────
 async function handleTestKey({ apiKey }, sendResponse) {
   try {
-    await callClaude(apiKey, 'Reply with the single word: OK', 10);
+    await callModel({
+      apiKey,
+      model: CONFIG.models.fast,
+      messages: [{ role: 'user', content: 'Reply with the single word: OK' }],
+      maxTokens: 64
+    });
     sendResponse({ valid: true });
   } catch (err) {
     sendResponse({ valid: false, reason: err.message });
@@ -205,23 +301,12 @@ Recipient profile: ${JSON.stringify({
 Personalisation hooks: ${hooks.join(' | ')}
 Sender name: ${settings.userName || '(not given)'}. Sender bio: ${settings.userBio || '(not given)'}.
 Return only the message text, nothing else.`;
-  return (await callClaude(apiKey, prompt, 400)).trim();
-}
-
-async function callClaude(apiKey, prompt, maxTokens) {
-  const res = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error?.message || `API error (${res.status})`);
-  return (data.content || []).map(c => c.text || '').join('');
+  return (await callModel({
+    apiKey,
+    model: CONFIG.models.fast,
+    messages: [{ role: 'user', content: prompt }],
+    maxTokens: 800
+  })).trim();
 }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────

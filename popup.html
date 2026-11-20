@@ -49,7 +49,7 @@
         </div>
       </div>
 
-      <div class="controls-row">
+      <div class="controls-row" id="quick-controls-row">
         <div class="field-group">
           <label class="field-label" for="message-type">Message Type</label>
           <div class="select-wrapper">
@@ -75,7 +75,7 @@
 
       <div class="mode-toggle">
         <button class="mode-btn active" id="mode-simple">⚡ Quick Mode</button>
-        <button class="mode-btn" id="mode-deep">🔍 Deep Mode (3-Layer AI)</button>
+        <button class="mode-btn" id="mode-deep">🔍 Deep Mode</button>
       </div>
 
       <!-- Simple Mode -->
@@ -89,12 +89,12 @@
       <!-- Deep Mode -->
       <div id="deep-mode-ui" class="hidden">
         <div class="pipeline-panel">
-          <div class="pipeline-header">3-Layer AI Pipeline</div>
+          <div class="pipeline-header">Run progress</div>
           <div class="layer-row">
             <div class="layer-badge l1">L1</div>
             <div class="layer-info">
-              <div class="layer-title">OpenAI — Profile Parser</div>
-              <div class="layer-desc">Structures raw LinkedIn DOM into JSON</div>
+              <div class="layer-title">Memory</div>
+              <div class="layer-desc">Resume-to-profile matching will be added later.</div>
             </div>
             <div class="layer-status-wrap">
               <div class="status-dot" id="l1-dot"></div>
@@ -104,8 +104,8 @@
           <div class="layer-row">
             <div class="layer-badge l2">L2</div>
             <div class="layer-info">
-              <div class="layer-title">OpenAI — Web Enrichment</div>
-              <div class="layer-desc">Searches company news &amp; public work</div>
+              <div class="layer-title">Company</div>
+              <div class="layer-desc">Company research will be added later.</div>
             </div>
             <div class="layer-status-wrap">
               <div class="status-dot" id="l2-dot"></div>
@@ -115,8 +115,8 @@
           <div class="layer-row">
             <div class="layer-badge l3">L3</div>
             <div class="layer-info">
-              <div class="layer-title">Message Writer</div>
-              <div class="layer-desc">Synthesizes everything into personalized message</div>
+              <div class="layer-title">Approach</div>
+              <div class="layer-desc">Returns a clearly labelled placeholder draft in Step 1.</div>
             </div>
             <div class="layer-status-wrap">
               <div class="status-dot" id="l3-dot"></div>
@@ -125,19 +125,44 @@
           </div>
         </div>
 
-        <div class="hooks-panel hidden" id="hooks-panel">
-          <div class="hooks-label">⚡ Top hooks found</div>
-          <div id="hooks-list"></div>
+        <div class="controls-row deep-controls-row">
+          <div class="field-group">
+            <label class="field-label" for="deep-goal">Outreach Goal</label>
+            <div class="select-wrapper">
+              <select id="deep-goal" class="field-select">
+                <option value="internship">Internship</option>
+                <option value="referral">Referral</option>
+                <option value="informational_chat">Informational chat</option>
+                <option value="recruiter_outreach">Recruiter outreach</option>
+                <option value="collaboration">Collaboration</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="deep-message-type">Message Type</label>
+            <div class="select-wrapper">
+              <select id="deep-message-type" class="field-select">
+                <option value="connection_note">Connection note</option>
+                <option value="message">Message</option>
+              </select>
+            </div>
+          </div>
         </div>
 
-        <button id="enrich-btn" class="btn btn-primary btn-full">
-          <span id="enrich-label">Scrape + Enrich (L1 + L2)</span>
-          <span id="enrich-spinner" class="spinner hidden"></span>
+        <div class="alert alert-warning hidden" id="deep-key-warning">
+          Add your Groq API key in Settings to enable Deep Mode. Quick Mode remains available without a key.
+        </div>
+
+        <button id="deep-run-btn" class="btn btn-primary btn-full">
+          <span id="deep-run-label">Run Deep Mode</span>
+          <span id="deep-run-spinner" class="spinner hidden"></span>
         </button>
-        <button id="deep-generate-btn" class="btn btn-secondary btn-full" disabled>
-          <span id="deep-gen-label">Generate Message (L3)</span>
-          <span id="deep-gen-spinner" class="spinner hidden"></span>
-        </button>
+
+        <div class="deep-result hidden" id="deep-result">
+          <div class="deep-result-title">Step 1 placeholder result</div>
+          <div class="deep-result-note">This confirms the pipeline is connected. Matching, company research, and personalized drafting come in later steps.</div>
+          <textarea id="deep-draft" class="deep-draft-preview" rows="3" readonly></textarea>
+        </div>
       </div>
 
       <div class="status-bar hidden" id="status-message"></div>
@@ -182,11 +207,11 @@
 
         <!-- Optional: user's own API key -->
         <div class="license-key-section">
-          <div class="license-key-label">Your Anthropic API Key (optional)</div>
-          <div class="license-key-desc">Leave empty to use Free Mode (no key needed). Add your own key for AI-written messages.</div>
+          <div class="license-key-label">Your Groq API Key (optional)</div>
+          <div class="license-key-desc">Leave empty to use Free Mode (no key needed). Add your Groq key for AI-written messages.</div>
           <div class="license-key-input-wrap">
             <input id="api-key" type="password" class="license-key-input"
-              placeholder="sk-ant-…" autocomplete="off" spellcheck="false" />
+              placeholder="gsk_…" autocomplete="off" spellcheck="false" />
             <button class="validate-btn" id="validate-btn">Test</button>
           </div>
           <div class="key-validation-status hidden" id="key-validation-status"></div>
@@ -217,7 +242,7 @@
         <div class="status-bar hidden" id="settings-status"></div>
 
         <div class="settings-note">
-          Everything is stored locally on your device. No data is sent to any company server.
+          Settings and the uploaded PDF stay on your device. In AI Mode, profile details and your bio are sent to Groq to draft a message.
         </div>
 
       </div>

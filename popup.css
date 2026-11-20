@@ -283,6 +283,7 @@ body {
 
 .status-dot.running { background: var(--warning); animation: pulse 1s ease-in-out infinite; }
 .status-dot.done    { background: var(--success); }
+.status-dot.skipped { background: var(--text-2); opacity: 0.55; }
 .status-dot.error   { background: var(--error); }
 
 @keyframes pulse {
@@ -292,42 +293,41 @@ body {
 
 .layer-status-text { font-size: 11px; color: var(--text-2); }
 
-/* ── Hooks panel ───────────────────────────────────────────────────────────── */
-.hooks-panel {
-  background: var(--l2-bg);
-  border: 1px solid #A5F3FC;
+.deep-controls-row { margin-top: 10px; }
+
+.deep-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 9px 12px;
-  margin-bottom: 10px;
+  padding: 10px 12px;
+  margin-top: 4px;
 }
 
-.hooks-label {
-  font-size: 10.5px;
-  font-weight: 600;
+.deep-result-title {
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--l2-color);
-  margin-bottom: 7px;
+  letter-spacing: 0.04em;
 }
 
-.hook-item {
-  font-size: 12px;
-  color: var(--text);
-  padding: 4px 0 4px 12px;
-  border-bottom: 1px solid rgba(14, 116, 144, 0.12);
-  position: relative;
+.deep-result-note {
+  color: var(--text-2);
+  font-size: 11px;
   line-height: 1.45;
+  margin: 4px 0 8px;
 }
 
-.hook-item:last-child { border-bottom: none; }
-
-.hook-item::before {
-  content: '→';
-  position: absolute;
-  left: 0;
-  color: var(--l2-color);
-  font-size: 10px;
-  top: 5px;
+.deep-draft-preview {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────────────── */
