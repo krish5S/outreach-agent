@@ -16,6 +16,8 @@ export const CONFIG = Object.freeze({
     maxFacts: 40,
     connectionNoteDefault: 200,
     connectionNoteMax: 300,
+    messageMax: 600,
+    maxNewsItems: 5,
     maxDrafts: 3
   }),
   goals: Object.freeze([

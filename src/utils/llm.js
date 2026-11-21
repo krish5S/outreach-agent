@@ -61,6 +61,9 @@ async function requestModel({
   reasoningEffort,
   includeReasoning,
   tools,
+  toolChoice,
+  citationOptions,
+  temperature,
   json,
   fetchImpl,
   timeoutMs
@@ -80,6 +83,9 @@ async function requestModel({
   if (includeReasoning !== undefined) body.include_reasoning = includeReasoning;
   if (json) body.response_format = { type: 'json_object' };
   if (Array.isArray(tools) && tools.length) body.tools = tools;
+  if (toolChoice) body.tool_choice = toolChoice;
+  if (citationOptions) body.citation_options = citationOptions;
+  if (temperature !== undefined) body.temperature = temperature;
 
   try {
     const response = await fetchFunction(GROQ_CHAT_COMPLETIONS_URL, {
@@ -134,6 +140,9 @@ export async function callModel(options = {}) {
     includeReasoning: false,
     json,
     tools: options.tools,
+    toolChoice: options.toolChoice,
+    citationOptions: options.citationOptions,
+    temperature: options.temperature,
     fetchImpl: options.fetchImpl,
     timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS
   };

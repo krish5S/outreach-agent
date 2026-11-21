@@ -23,8 +23,8 @@ flowchart TD
   Background --> Quick[Quick Mode message]
   Background --> Pipeline[Deep Mode pipeline]
   Pipeline --> Memory[Layer 1: resume/profile matching]
-  Pipeline --> Company[Layer 2: planned company research]
-  Pipeline --> Approach[Layer 3: placeholder strategy/draft]
+  Pipeline --> Company[Layer 2: Groq web search and company news]
+  Pipeline --> Approach[Layer 3: evidence-based strategy and drafts]
   Memory --> Results[Popup results and matched facts]
   Company --> Results
   Approach --> Results
@@ -45,6 +45,16 @@ flowchart TD
 
 Resume and viewed-profile facts stay on-device during matching. They are not sent to an embeddings service.
 
+## Deep Mode Layer 2
+
+`src/layers/company.js` uses the company confirmed in the popup. `src/utils/search.js` asks Groq's GPT-OSS browser-search tool for current dated sources, then a fast Groq call condenses no more than five facts. The code validates each source URL and date and drops news older than 12 months. News is cached by normalized company name for 24 hours; the selected company is remembered locally per profile URL.
+
+The local keyword matcher compares dated news facts with resume facts, interests, and the selected outreach goal. The results panel shows source links, dates, and whether cached data was reused. A missing company or failed search skips Layer 2 while the rest of the pipeline continues.
+
+## Deep Mode Layer 3
+
+`src/layers/approach.js` builds an evidence pack from strong and medium Layer 1 and Layer 2 matches. A Groq strategist selects one primary hook and at most two supporting matches; a writer prepares short, medium, and question-led drafts. The app validates evidence IDs and message limits, retries invalid model output once, and uses a plain local fallback when there is no suitable match. Users can edit, copy, switch between, or regenerate drafts. Drafts are never sent automatically.
+
 ## Extension storage
 
 | Key | Contents |
@@ -53,5 +63,7 @@ Resume and viewed-profile facts stay on-device during matching. They are not sen
 | `memoryCard` | The structured resume card and its facts. |
 | `vecCache` | Cached local keyword vectors keyed by fact type and text hash. |
 | `recentContacts` | Recent generated message records. |
+| `companyCache:<slug>` | Dated public company news and source links, cached for 24 hours. |
+| `companyChoice:<hash>` | User-confirmed company name associated with a profile URL. |
 
 Use **Clear all my data** in Settings to remove extension-local data.

@@ -105,7 +105,7 @@
             <div class="layer-badge l2">L2</div>
             <div class="layer-info">
               <div class="layer-title">Company</div>
-              <div class="layer-desc">Company news matching is planned for Step 4.</div>
+              <div class="layer-desc">Finds recent company news and relates it to your resume and goal.</div>
             </div>
             <div class="layer-status-wrap">
               <div class="status-dot" id="l2-dot"></div>
@@ -116,13 +116,20 @@
             <div class="layer-badge l3">L3</div>
             <div class="layer-info">
               <div class="layer-title">Approach</div>
-              <div class="layer-desc">Draft strategy and writing are planned for Steps 5–6.</div>
+              <div class="layer-desc">Chooses an evidence-backed hook and prepares three draft options.</div>
             </div>
             <div class="layer-status-wrap">
               <div class="status-dot" id="l3-dot"></div>
               <span class="layer-status-text" id="l3-text">Waiting</span>
             </div>
           </div>
+        </div>
+
+        <div class="field-group full deep-company-group">
+          <label class="field-label" for="deep-company">Company to research</label>
+          <input id="deep-company" type="text" class="field-input" maxlength="120"
+            placeholder="Confirm or enter the company name" autocomplete="off" />
+          <div class="field-hint">The first run loads the profile and suggests a company. Review or edit it, then run Deep Mode again.</div>
         </div>
 
         <div class="controls-row deep-controls-row">
@@ -159,9 +166,28 @@
         </button>
 
         <div class="deep-result hidden" id="deep-result">
-          <div class="deep-result-title">Step 3 results</div>
-          <div class="deep-result-note">Layer 1 matches appear below. Company intelligence and personalized message drafting are added in later steps.</div>
-          <textarea id="deep-draft" class="deep-draft-preview" rows="3" readonly></textarea>
+          <div class="deep-result-title">Deep Mode results</div>
+          <div class="deep-result-note" id="deep-result-note">Company news, relevant matches, and evidence-based draft options appear below.</div>
+          <section class="company-news-panel" aria-labelledby="company-news-title">
+            <div class="deep-section-heading">
+              <h3 id="company-news-title">Recent company news</h3>
+              <span id="company-news-cache" class="cache-badge hidden">Cached</span>
+            </div>
+            <div id="company-news-list" class="company-news-list"></div>
+          </section>
+          <section class="deep-draft-panel" aria-labelledby="deep-draft-heading">
+            <div class="deep-draft-header">
+              <h3 id="deep-draft-heading">Message drafts</h3>
+              <span id="deep-char-count" class="deep-char-count"></span>
+            </div>
+            <div id="deep-draft-tabs" class="deep-draft-tabs" role="tablist" aria-label="Draft variants"></div>
+            <textarea id="deep-draft" class="deep-draft-preview" rows="5" spellcheck="true"></textarea>
+            <div id="deep-strategy-note" class="deep-result-note"></div>
+            <div class="deep-draft-actions">
+              <button id="deep-regenerate-btn" class="btn btn-secondary">Regenerate drafts</button>
+              <button id="deep-copy-btn" class="btn btn-primary">Copy draft</button>
+            </div>
+          </section>
           <section class="memory-match-panel" aria-labelledby="memory-match-title">
             <h3 id="memory-match-title">Matches found</h3>
             <div id="memory-match-list" class="memory-match-list"></div>
@@ -212,7 +238,7 @@
         <!-- Optional: user's own API key -->
         <div class="license-key-section">
           <div class="license-key-label">Your Groq API Key (optional)</div>
-          <div class="license-key-desc">Leave empty to use Free Mode (no key needed). Add your Groq key for AI-written messages.</div>
+          <div class="license-key-desc">Quick Mode can use a local draft without a key. Add your Groq key for AI-written messages, resume-card structuring, and Deep Mode company research and drafts.</div>
           <div class="license-key-input-wrap">
             <input id="api-key" type="password" class="license-key-input"
               placeholder="gsk_…" autocomplete="off" spellcheck="false" />
@@ -274,7 +300,7 @@
         <div class="status-bar hidden" id="settings-status"></div>
 
         <div class="settings-note">
-          Profile details and your bio are sent to Groq when drafting messages. Resume PDFs, OCR, and resume-to-profile matching stay on this device. Only the sanitized resume section JSON you review is sent to Groq to build a memory card.
+          Deep Mode sends the selected company, outreach goal, up to eight skills/interests keywords, and public search results to Groq. Drafting also sends your saved resume facts (up to 40 short facts), matched profile/news facts, sender name, and background. Resume PDFs, OCR, and keyword matching stay on this device. Company news is cached locally for 24 hours. Review the company name before running; the extension only prepares drafts and never sends LinkedIn messages.
         </div>
 
       </div>

@@ -1,6 +1,6 @@
 # Outreach Agent
 
-A Manifest V3 Chrome extension that reads a LinkedIn profile and helps prepare personalized outreach. Quick Mode drafts a message; Deep Mode compares the profile with a locally saved resume card. Deep Mode’s later company research and personalized drafting layers are still planned.
+A Manifest V3 Chrome extension that reads one LinkedIn profile at a time and prepares personalized outreach. Quick Mode drafts a message. Deep Mode compares the profile with a locally saved resume card, researches recent company news, and prepares three evidence-based message variants for review.
 
 ## Run the extension
 
@@ -9,7 +9,7 @@ A Manifest V3 Chrome extension that reads a LinkedIn profile and helps prepare p
 3. Choose **Load unpacked** and select this repository’s root folder (the folder containing `manifest.json`).
 4. Open a LinkedIn profile and click the extension.
 
-Add a Groq API key in **Settings** to structure a resume card and run Deep Mode. Layer 1 uses local keyword matching; it does not need a separate embeddings provider, model, or API key. Quick Mode remains available independently.
+Add a Groq API key in **Settings** to structure a resume card, research company news, and run Deep Mode. Layer 1 uses local keyword matching; it does not need a separate embeddings provider, model, or API key. Quick Mode remains available independently.
 
 ## Project map
 
@@ -38,6 +38,6 @@ node scripts/score-report.mjs
 
 ## Data and privacy
 
-Resume PDFs and OCR run locally. Detected name and headline stay local; recognized email, phone, and common street-address patterns are removed before resume sections are sent to Groq for memory-card structuring. Review the sanitized sections before submitting them. The saved resume card remains in extension storage.
+Resume PDFs and OCR run locally. Detected name and headline stay local during resume extraction; recognized email, phone, and common street-address patterns are removed before the sections you review are sent to Groq for memory-card structuring. The saved resume card remains in extension storage.
 
-Resume-to-profile matching and its cached keyword vectors stay on-device. No resume or viewed-profile facts are sent to an embeddings service. Resume section JSON is sent to Groq only after local redaction and user review to build the memory card; profile details and bio are sent to Groq when drafting messages. API keys are stored in the extension’s local Chrome storage.
+Resume-to-profile matching and its cached keyword vectors stay on-device. Company search sends the selected company, goal, and up to eight skills/interests keywords to Groq; Groq returns dated public results that it condenses. Drafting sends the saved resume facts (up to 40 short facts), the Layer 1/2 matches, your sender name, and your background. Company news is cached locally for 24 hours. API keys stay in Chrome local storage, and the extension never sends LinkedIn messages.

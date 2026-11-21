@@ -2,14 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runDeepPipeline } from '../src/layers/pipeline.js';
 
-test('pipeline emits ordered progress and returns a placeholder draft', async () => {
+test('pipeline emits ordered progress and returns generated draft variants', async () => {
   const events = [];
   const result = await runDeepPipeline({
     runId: 'run-test',
     profileJSON: { profileUrl: 'https://www.linkedin.com/in/fake-person/' },
     goal: 'internship',
     messageType: 'message'
-  }, { emit: (event) => events.push(event) });
+  }, {
+    emit: (event) => events.push(event),
+    layers: {
+      company: async () => ({ status: 'skipped', detail: 'Company omitted.' }),
+      approach: async () => ({
+        status: 'done',
+        detail: 'Prepared three drafts.',
+        strategy: { mode: 'fallback' },
+        drafts: [{ variant: 'short', text: 'Hi Jordan, could we chat?', charCount: 25, claims: [] }]
+      })
+    }
+  });
 
   assert.deepEqual(
     events.filter((event) => event.status === 'start').map((event) => event.layer),
@@ -18,7 +29,7 @@ test('pipeline emits ordered progress and returns a placeholder draft', async ()
   assert.equal(result.runId, 'run-test');
   assert.equal(result.profileUrl, 'https://www.linkedin.com/in/fake-person/');
   assert.equal(result.drafts.length, 1);
-  assert.match(result.drafts[0].text, /placeholder/i);
+  assert.equal(result.drafts[0].text, 'Hi Jordan, could we chat?');
 });
 
 test('a failing layer is reported while later layers still run', async () => {
@@ -50,4 +61,23 @@ test('the default pipeline runs Layer 1 and includes its matches in the result',
   assert.equal(result.matches.length, 1);
   assert.equal(result.matches[0].tier, 'strong');
   assert.match(result.layers.memory.detail, /match/);
+});
+
+test('Layer 1 and Layer 2 matches are both passed to Layer 3 and returned', async () => {
+  let approachMatches = [];
+  const memoryMatch = { meFactId: 'M1', otherFactId: 'P1', score: 0.8, tier: 'strong', layer: 1 };
+  const companyMatch = { meFactId: 'M2', otherFactId: 'N1', score: 0.7, tier: 'strong', layer: 2 };
+  const result = await runDeepPipeline({}, {
+    layers: {
+      memory: async () => ({ status: 'done', matches: [memoryMatch] }),
+      company: async () => ({ status: 'done', matches: [companyMatch], newsFacts: [], sources: [] }),
+      approach: async (ctx) => {
+        approachMatches = ctx.matches;
+        return { status: 'done', drafts: [{ variant: 'short', text: 'A draft.', charCount: 8, claims: [] }] };
+      }
+    }
+  });
+  assert.deepEqual(approachMatches, [memoryMatch, companyMatch]);
+  assert.deepEqual(result.matches, [memoryMatch, companyMatch]);
+  assert.equal(result.drafts[0].text, 'A draft.');
 });

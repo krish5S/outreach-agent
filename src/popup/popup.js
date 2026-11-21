@@ -11,6 +11,12 @@ let deepRunFinished    = false;
 let selectedResumeFile = null;
 let memoryCardOriginal = null;
 let preparedResumeIdentity = { name: '', headline: '' };
+let preparedDeepProfileUrl = '';
+let deepCompanyProfileUrl = '';
+let deepDrafts = [];
+let selectedDeepDraft = 0;
+let deepDraftLimit = 600;
+let deepResultContext = null;
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -97,6 +103,12 @@ async function updateDeepRunAvailability() {
 function wireCurrentEvents() {
   document.getElementById('scrape-btn').addEventListener('click', handleScrapeAndGenerate);
   document.getElementById('deep-run-btn').addEventListener('click', handleDeepRun);
+  document.getElementById('deep-company').addEventListener('input', () => {
+    deepCompanyProfileUrl = currentProfile?.profileUrl || preparedDeepProfileUrl;
+  });
+  document.getElementById('deep-draft').addEventListener('input', handleDeepDraftEdit);
+  document.getElementById('deep-regenerate-btn').addEventListener('click', handleDeepRegenerate);
+  document.getElementById('deep-copy-btn').addEventListener('click', handleDeepCopy);
   document.getElementById('regenerate-btn').addEventListener('click', handleRegenerate);
   document.getElementById('copy-btn').addEventListener('click', handleCopy);
   document.getElementById('generated-message').addEventListener('input', updateCharCount);
@@ -229,8 +241,42 @@ async function handleDeepRun() {
   setButtonLoading('deep-run-btn', 'deep-run-label', 'deep-run-spinner', true, 'Scraping profile…');
 
   try {
-    const profile = await sendToBackground({ action: 'scrapeProfile' });
-    currentProfile = profile;
+    let profile = currentProfile;
+    let requestedCompany = document.getElementById('deep-company').value.trim();
+    if (deepCompanyProfileUrl && profile?.profileUrl && deepCompanyProfileUrl !== profile.profileUrl) {
+      requestedCompany = '';
+      document.getElementById('deep-company').value = '';
+    }
+
+    if (!profile || preparedDeepProfileUrl !== profile.profileUrl) {
+      profile = await sendToBackground({ action: 'scrapeProfile' });
+      currentProfile = profile;
+      renderProfileCard(profile);
+      const savedCompany = await sendToBackground({ type: 'GET_COMPANY_CHOICE', payload: { profileUrl: profile.profileUrl } }).catch(() => '');
+      const manualCompany = requestedCompany;
+      if (!manualCompany) {
+        document.getElementById('deep-company').value = savedCompany || suggestedCompany(profile.currentCompany);
+      }
+      preparedDeepProfileUrl = profile.profileUrl || '';
+      deepCompanyProfileUrl = preparedDeepProfileUrl;
+      setButtonLoading('deep-run-btn', 'deep-run-label', 'deep-run-spinner', false, 'Run Deep Mode');
+      isDeepRunning = false;
+      deepRunFinished = true;
+      if (!manualCompany && !savedCompany) {
+        const suggested = document.getElementById('deep-company').value;
+        showCurrentStatus(
+          suggested
+            ? `Profile loaded. Confirm or edit “${suggested}”, then click Run Deep Mode again.`
+            : 'Profile loaded. Enter a company to research, or leave it blank to skip company news, then click Run Deep Mode again.',
+          'success'
+        );
+        updateDeepRunAvailability();
+        return;
+      }
+      requestedCompany = manualCompany || savedCompany || document.getElementById('deep-company').value.trim();
+    }
+
+    profile = currentProfile;
     renderProfileCard(profile);
     setButtonLoading('deep-run-btn', 'deep-run-label', 'deep-run-spinner', true, 'Running layers…');
     showCurrentStatus('Profile scraped. Starting the Deep Mode pipeline…');
@@ -249,6 +295,7 @@ async function handleDeepRun() {
       type: 'run',
       payload: {
         profileJSON: profile,
+        company: document.getElementById('deep-company').value.trim(),
         goal: document.getElementById('deep-goal').value,
         messageType: document.getElementById('deep-message-type').value
       }
@@ -273,13 +320,37 @@ function handleDeepRunEvent(event) {
   }
 
   if (event?.type === 'result') {
-    const draft = event.result?.drafts?.[0]?.text || 'No placeholder draft was returned.';
-    document.getElementById('deep-draft').value = draft;
-    renderMemoryMatches(event.result?.matches || [], event.result?.layers?.memory);
+    const result = event.result || {};
+    const companyLayer = result.layers?.company || {};
+    deepResultContext = {
+      profileJSON: currentProfile || {},
+      company: document.getElementById('deep-company').value.trim(),
+      goal: document.getElementById('deep-goal').value,
+      messageType: document.getElementById('deep-message-type').value,
+      matches: result.matches || [],
+      newsFacts: companyLayer.newsFacts || []
+    };
+    renderDeepDrafts(result.drafts || [], result.strategy, deepResultContext.messageType);
+    renderCompanyNews(companyLayer.newsFacts || [], companyLayer.cached, companyLayer.detail);
+    const combinedMatches = Array.isArray(result.matches) ? result.matches : [];
+    renderMemoryMatches(combinedMatches, {
+      detail: combinedMatches.length
+        ? ''
+        : 'No resume/profile or company-news facts cleared the medium match threshold.'
+    });
+    const note = document.getElementById('deep-result-note');
+    const newsCount = (companyLayer.newsFacts || []).length;
+    const draftCount = (result.drafts || []).length;
+    note.textContent = `Found ${result.matches?.length || 0} evidence match${result.matches?.length === 1 ? '' : 'es'}, ${newsCount} recent news item${newsCount === 1 ? '' : 's'}, and ${draftCount} draft variant${draftCount === 1 ? '' : 's'}.`;
+    document.getElementById('deep-strategy-note').textContent = result.strategy?.rationale || 'Drafts use the available profile and resume facts without claiming an unsupported connection.';
     document.getElementById('deep-result').classList.remove('hidden');
     finishDeepRun();
-    const memoryDetail = event.result?.layers?.memory?.detail || 'Layer 1 matching completed.';
-    showCurrentStatus(memoryDetail + ' Message drafting remains a placeholder until a later step.', 'success');
+    if (draftCount) {
+      showCurrentStatus('Deep Mode finished. Review the company sources, matches, and draft before copying.', 'success');
+    } else {
+      const approachDetail = result.layers?.approach?.detail || 'The writer returned no draft.';
+      showCurrentStatus(`Matching and company research finished, but drafting failed: ${approachDetail} Use Regenerate drafts to retry.`, 'error');
+    }
     return;
   }
 
@@ -323,11 +394,141 @@ function renderMemoryMatches(matches, layerResult = {}) {
     const otherFact = document.createElement('p');
     otherFact.className = 'memory-match-fact';
     const otherLabel = document.createElement('strong');
-    otherLabel.textContent = 'Profile: ';
+    otherLabel.textContent = Number(match.layer) === 2 ? 'Company news: ' : 'Profile: ';
     otherFact.append(otherLabel, document.createTextNode(match.otherText || match.otherFactId || ''));
 
     item.append(header, meFact, otherFact);
     list.append(item);
+  }
+}
+
+function suggestedCompany(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text || /^(?:full[- ]?time|part[- ]?time|present|current)$/i.test(text)) return '';
+  if (/\b\d+\s*(?:yr|year|mo|month|week|day)s?\b/i.test(text)) return '';
+  return text;
+}
+
+function renderCompanyNews(newsFacts, cached, detail = '') {
+  const list = document.getElementById('company-news-list');
+  const badge = document.getElementById('company-news-cache');
+  list.replaceChildren();
+  badge.classList.toggle('hidden', !cached);
+  if (!Array.isArray(newsFacts) || !newsFacts.length) {
+    const empty = document.createElement('div');
+    empty.className = 'company-news-empty';
+    empty.textContent = detail || 'No recent company news was available for this run.';
+    list.append(empty);
+    return;
+  }
+
+  for (const fact of newsFacts) {
+    const item = document.createElement('article');
+    item.className = 'company-news-item';
+    const link = document.createElement('a');
+    link.href = fact?.meta?.url || '#';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = fact?.meta?.title || 'Company news source';
+    const meta = document.createElement('div');
+    meta.className = 'company-news-meta';
+    meta.textContent = [fact?.meta?.date, fact?.meta?.kind].filter(Boolean).join(' · ');
+    const summary = document.createElement('div');
+    summary.className = 'company-news-text';
+    summary.textContent = fact?.text || '';
+    item.append(link, meta, summary);
+    list.append(item);
+  }
+}
+
+function renderDeepDrafts(drafts, strategy, messageType) {
+  deepDrafts = Array.isArray(drafts) ? drafts.map((draft) => ({ ...draft })) : [];
+  selectedDeepDraft = 0;
+  deepDraftLimit = messageType === 'connection_note' ? 200 : 600;
+  const tabs = document.getElementById('deep-draft-tabs');
+  tabs.replaceChildren();
+  if (!deepDrafts.length) {
+    document.getElementById('deep-draft').value = '';
+    document.getElementById('deep-draft').placeholder = 'No draft was returned. Use Regenerate drafts to try again.';
+    document.getElementById('deep-char-count').textContent = `0 / ${deepDraftLimit}`;
+    return;
+  }
+  deepDrafts.forEach((draft, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'deep-variant-tab' + (index === 0 ? ' active' : '');
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-selected', index === 0 ? 'true' : 'false');
+    button.textContent = ({ short: 'Short', medium: 'Medium', question: 'Question' })[draft.variant] || draft.variant;
+    button.addEventListener('click', () => selectDeepDraft(index));
+    tabs.append(button);
+  });
+  document.getElementById('deep-draft').placeholder = '';
+  document.getElementById('deep-draft').value = deepDrafts[0].text || '';
+  document.getElementById('deep-regenerate-btn').disabled = false;
+  document.getElementById('deep-copy-btn').disabled = false;
+  updateDeepDraftCount();
+  document.getElementById('deep-strategy-note').textContent = strategy?.rationale || '';
+}
+
+function selectDeepDraft(index) {
+  if (deepDrafts[selectedDeepDraft]) {
+    deepDrafts[selectedDeepDraft].text = document.getElementById('deep-draft').value;
+    deepDrafts[selectedDeepDraft].charCount = deepDrafts[selectedDeepDraft].text.length;
+  }
+  selectedDeepDraft = index;
+  document.querySelectorAll('.deep-variant-tab').forEach((button, buttonIndex) => {
+    button.classList.toggle('active', buttonIndex === index);
+    button.setAttribute('aria-selected', buttonIndex === index ? 'true' : 'false');
+  });
+  document.getElementById('deep-draft').value = deepDrafts[index]?.text || '';
+  updateDeepDraftCount();
+}
+
+function handleDeepDraftEdit() {
+  if (deepDrafts[selectedDeepDraft]) {
+    deepDrafts[selectedDeepDraft].text = document.getElementById('deep-draft').value;
+    deepDrafts[selectedDeepDraft].charCount = deepDrafts[selectedDeepDraft].text.length;
+  }
+  updateDeepDraftCount();
+}
+
+function updateDeepDraftCount() {
+  const text = document.getElementById('deep-draft').value;
+  const count = document.getElementById('deep-char-count');
+  count.textContent = `${text.length} / ${deepDraftLimit} chars`;
+  count.classList.toggle('over-limit', text.length > deepDraftLimit);
+}
+
+async function handleDeepCopy() {
+  const text = document.getElementById('deep-draft').value.trim();
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); }
+  catch (_) {
+    const input = document.getElementById('deep-draft');
+    input.select();
+    document.execCommand('copy');
+  }
+  const button = document.getElementById('deep-copy-btn');
+  const original = button.textContent;
+  button.textContent = 'Copied';
+  setTimeout(() => { button.textContent = original; }, 1800);
+}
+
+async function handleDeepRegenerate() {
+  if (isDeepRunning || !deepResultContext) return;
+  const button = document.getElementById('deep-regenerate-btn');
+  button.disabled = true;
+  button.textContent = 'Regenerating…';
+  try {
+    const result = await sendToBackground({ type: 'REGENERATE_DEEP_DRAFT', payload: deepResultContext });
+    renderDeepDrafts(result.drafts || [], result.strategy, deepResultContext.messageType);
+    showCurrentStatus('Three new draft options are ready.', 'success');
+  } catch (error) {
+    showCurrentStatus(error.message || 'Could not regenerate the drafts.', 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Regenerate drafts';
   }
 }
 

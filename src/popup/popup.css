@@ -294,6 +294,8 @@ body {
 .layer-status-text { font-size: 11px; color: var(--text-2); }
 
 .deep-controls-row { margin-top: 10px; }
+.deep-company-group { margin-top: 8px; }
+.field-hint { margin-top: 4px; color: var(--text-2); font-size: 10px; line-height: 1.4; }
 
 .deep-result {
   background: var(--surface);
@@ -317,6 +319,29 @@ body {
   margin: 4px 0 8px;
 }
 
+.company-news-panel, .deep-draft-panel { margin-top: 12px; }
+.deep-section-heading, .deep-draft-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.deep-section-heading h3, .deep-draft-header h3 { margin: 0 0 7px; font-size: 11px; }
+.cache-badge { color: var(--l2-color); background: var(--l2-bg); border-radius: 999px; padding: 2px 7px; font-size: 9px; font-weight: 700; }
+.company-news-list { display: flex; flex-direction: column; gap: 7px; }
+.company-news-item { padding: 8px; background: var(--l2-bg); border-radius: var(--radius-sm); }
+.company-news-item a { color: var(--l2-color); font-size: 11px; font-weight: 600; line-height: 1.4; text-decoration: none; }
+.company-news-item a:hover { text-decoration: underline; }
+.company-news-meta { margin-top: 3px; color: var(--text-2); font-size: 9.5px; }
+.company-news-text { margin-top: 4px; font-size: 10.5px; line-height: 1.4; }
+.company-news-empty { color: var(--text-2); font-size: 10.5px; line-height: 1.4; }
+
+.deep-draft-header { margin-bottom: 6px; }
+.deep-draft-header h3 { margin: 0; }
+.deep-char-count { color: var(--text-2); font-size: 10px; font-variant-numeric: tabular-nums; }
+.deep-char-count.over-limit { color: var(--error); font-weight: 700; }
+.deep-draft-tabs { display: flex; gap: 5px; margin-bottom: 6px; }
+.deep-variant-tab { flex: 1; padding: 5px 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-2); font-size: 10px; cursor: pointer; }
+.deep-variant-tab.active { border-color: var(--accent); background: var(--accent-light); color: var(--accent); font-weight: 600; }
+.deep-draft-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 7px; }
+.deep-draft-actions .btn { font-size: 10.5px; padding: 6px 9px; }
+.deep-strategy-note { margin-top: 7px; }
+
 .deep-draft-preview {
   width: 100%;
   min-height: 64px;
@@ -329,6 +354,7 @@ body {
   font: inherit;
   line-height: 1.45;
 }
+.deep-draft-preview:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .memory-match-panel { margin-top: 12px; }
 .memory-match-panel h3 { margin: 0 0 7px; font-size: 11px; }
