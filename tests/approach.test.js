@@ -122,7 +122,8 @@ test('no-match input takes an honest local fallback without calling Groq', async
   assert.equal(calls, 0);
   assert.equal(result.strategy.mode, 'fallback');
   assert.equal(result.drafts.length, 3);
-  assert.match(result.drafts[0].text, /I'm Alex Example/);
+  assert.match(result.drafts[0].text, /I'm Alex Example, an AI student/);
   assert.match(result.drafts[0].text, /internship opportunities/i);
+  assert.doesNotMatch(result.drafts[1].text, /exploring internship\. I am exploring internship/i);
   assert.ok(result.drafts.every((draft) => draft.charCount <= 200));
 });

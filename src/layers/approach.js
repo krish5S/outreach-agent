@@ -215,6 +215,16 @@ function joinWithinLimit(parts, limit) {
   return kept.join(' ').trim();
 }
 
+function withHeadlineArticle(headline) {
+  const text = cleanText(headline, 110);
+  if (!text) return '';
+  const firstWord = text.split(/\s+/)[0].replace(/[^a-z]/gi, '').toLowerCase();
+  const article = /^(?:ai|aiml|ml|mba|msc|mtech|phd|sre|sql)$/.test(firstWord) || /^[aeiou]/i.test(firstWord)
+    ? 'an'
+    : 'a';
+  return article + ' ' + text;
+}
+
 function buildFallbackDrafts({ goal, messageType, limit, card, senderName, recipient, memoryFacts }) {
   const firstName = cleanText(recipient?.name, 100).split(/\s+/)[0] || 'there';
   const headlineFact = memoryFacts.find((fact) => fact.type === 'role');
@@ -223,13 +233,13 @@ function buildFallbackDrafts({ goal, messageType, limit, card, senderName, recip
   const roleFact = headlineFact;
   const roleClaim = headline && roleFact ? [{ text: `The sender's professional headline is ${headline}.`, evidenceIds: [roleFact.id] }] : [];
   const greeting = `Hi ${firstName},`;
-  const intro = senderName ? `I'm ${senderName}${headline ? `, ${headline}` : ''}.` : headline ? `I'm ${headline}.` : '';
+  const intro = senderName ? `I'm ${senderName}${headline ? `, ${withHeadlineArticle(headline)}` : ''}.` : headline ? `I'm ${withHeadlineArticle(headline)}.` : '';
   const variants = VARIANTS.map((variant) => {
     const ask = fallbackAsk(goal, variant);
     const pieces = variant === 'short'
       ? [greeting, intro, ask]
       : variant === 'medium'
-        ? [greeting, intro, `I'm exploring ${goalGuidance(goal).label}.`, ask]
+        ? [greeting, intro, ask]
         : [greeting, intro, ask];
     const text = joinWithinLimit(pieces, limit);
     const includeIntro = Boolean(intro && text.includes(intro));

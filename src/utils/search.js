@@ -102,7 +102,7 @@ Return only JSON in this shape: {"results":[{"title":"source page title","url":"
     messages: [{ role: 'user', content: prompt }],
     tools: GROQ_BROWSER_SEARCH_TOOL,
     toolChoice: 'required',
-    citationOptions: 'enabled',
+    citationOptions: 'disabled',
     reasoningEffort: 'low',
     maxTokens: 3500,
     timeoutMs: 60000

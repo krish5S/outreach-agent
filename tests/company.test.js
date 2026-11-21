@@ -63,6 +63,7 @@ test('Groq company search requests browser search and parses its source list', a
   assert.equal(request.toolChoice, 'required');
   assert.deepEqual(request.tools, [{ type: 'browser_search' }]);
   assert.equal(request.json, undefined);
+  assert.equal(request.citationOptions, 'disabled');
   assert.equal(result.length, 1);
   assert.equal(result[0].url, 'https://example.com/careers');
 });

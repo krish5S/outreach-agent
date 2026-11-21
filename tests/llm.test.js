@@ -41,7 +41,7 @@ test('callModel forwards Groq browser-search tool options without enabling JSON 
     messages: [{ role: 'user', content: 'Search for recent news.' }],
     tools: [{ type: 'browser_search' }],
     toolChoice: 'required',
-    citationOptions: 'enabled',
+    citationOptions: 'disabled',
     fetchImpl: async (_url, options) => {
       request = JSON.parse(options.body);
       return messageResponse('{"results":[]}');
@@ -49,7 +49,7 @@ test('callModel forwards Groq browser-search tool options without enabling JSON 
   });
   assert.deepEqual(request.tools, [{ type: 'browser_search' }]);
   assert.equal(request.tool_choice, 'required');
-  assert.equal(request.citation_options, 'enabled');
+  assert.equal(request.citation_options, 'disabled');
   assert.equal(request.response_format, undefined);
 });
 
