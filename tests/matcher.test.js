@@ -46,6 +46,32 @@ test('the same school or employer is a strong exact match regardless of vector s
   assert.ok(matches.every((match) => match.tier === 'strong' && match.exact && match.score === 1));
 });
 
+test('education names match across common full-name and acronym forms', () => {
+  const matches = matchFacts(
+    [{ id: 'M1', type: 'education', text: 'B.Tech — D. J. Sanghvi College of Engineering', vec: [1, 0], meta: { entity: 'D. J. Sanghvi College of Engineering' } }],
+    [{ id: 'P1', type: 'education', text: 'DJSCE', vec: [0, 1], meta: { entity: 'DJSCE' } }]
+  );
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].tier, 'strong');
+  assert.equal(matches[0].exact, true);
+});
+
+test('a resume achievement matches a post describing the same named event', () => {
+  const matches = matchFacts(
+    [{ id: 'M1', type: 'achievement', text: 'Achievement: Winner at ISRO Bharatiya Antariksh Hackathon 2026', vec: [1, 0], meta: {} }],
+    [{ id: 'P1', type: 'post', text: 'National Champions of ISRO BAH 2026', vec: [0, 1], meta: {} }]
+  );
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].tier, 'strong');
+  assert.equal(matches[0].exact, true);
+  assert.deepEqual(matchFacts(
+    [{ id: 'M2', type: 'achievement', text: 'Won first place in a hackathon', vec: [1, 0], meta: {} }],
+    [{ id: 'P2', type: 'post', text: 'National champions at a hackathon', vec: [0, 1], meta: {} }]
+  ), []);
+});
+
 test('an exact named tool overrides a low text similarity', () => {
   const matches = matchFacts(
     [{ id: 'M1', type: 'skill', text: 'Skill: PyTorch', vec: [1, 0], meta: { entities: ['PyTorch'] } }],

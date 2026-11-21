@@ -18,6 +18,16 @@ const cases = [
     other: [{ id: 'P1', source: 'person', type: 'skill', text: 'Python (Programming Language)', meta: { entities: ['Python (Programming Language)'] } }]
   },
   {
+    label: 'Education acronym',
+    me: [{ id: 'M1', source: 'me', type: 'education', text: 'B.Tech — D. J. Sanghvi College of Engineering', meta: { entity: 'D. J. Sanghvi College of Engineering' } }],
+    other: [{ id: 'P1', source: 'person', type: 'education', text: 'DJSCE', meta: { entity: 'DJSCE' } }]
+  },
+  {
+    label: 'Achievement post',
+    me: [{ id: 'M1', source: 'me', type: 'achievement', text: 'Achievement: Winner at ISRO Bharatiya Antariksh Hackathon 2026', meta: {} }],
+    other: [{ id: 'P1', source: 'person', type: 'post', text: 'National Champions of ISRO BAH 2026', meta: {} }]
+  },
+  {
     label: 'Unrelated skills',
     me: [{ id: 'M1', source: 'me', type: 'skill', text: 'Skill: Python', meta: { entities: ['Python'] } }],
     other: [{ id: 'P1', source: 'person', type: 'skill', text: 'Jazz performance', meta: { entities: ['Jazz'] } }]

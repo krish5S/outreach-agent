@@ -17,6 +17,7 @@ const SYNONYMS = Object.freeze({
   llm: ['large', 'language', 'model'],
   llms: ['large', 'language', 'model'],
   rag: ['retrieval', 'augmented', 'generation'],
+  bah: ['bharatiya', 'antariksh', 'hackathon'],
   nlp: ['natural', 'language', 'processing'],
   js: ['javascript'],
   ts: ['typescript'],

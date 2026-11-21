@@ -7,6 +7,16 @@ const GENERIC_TOKENS = new Set([
   'management', 'manager', 'design', 'analysis', 'analyst', 'cloud', 'web', 'application', 'applications',
   'student', 'professional', 'passionate', 'experienced', 'skilled', 'enthusiastic', 'seeking', 'team', 'member'
 ]);
+const EDUCATION_TYPE_WORDS = new Set([
+  'college', 'university', 'institute', 'school', 'academy', 'polytechnic'
+]);
+const EDUCATION_FILLER_WORDS = new Set(['of', 'the', 'and', 'at', 'in']);
+const EVENT_GENERIC_TOKENS = new Set([
+  ...GENERIC_TOKENS,
+  'achievement', 'achievements', 'award', 'awards', 'winner', 'winners', 'winning', 'won', 'win',
+  'champion', 'champions', 'national', 'place', 'first', 'rank', 'team', 'teams', 'secured',
+  'proud', 'share', 'received', 'participated', 'competition', 'competing', 'recognized'
+]);
 
 function cleanEntity(value) {
   return String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
@@ -17,6 +27,38 @@ function canonicalSkill(value) {
   const withoutLinkedInQualifier = String(value || '')
     .replace(/\s*\(?\s*programming languages?\s*\)?\s*$/i, '');
   return cleanEntity(withoutLinkedInQualifier);
+}
+
+function educationParts(value) {
+  const full = cleanEntity(value);
+  const words = full.split(' ').filter(Boolean);
+  const type = [...new Set(words.filter((word) => EDUCATION_TYPE_WORDS.has(word)))].sort().join(' ');
+  const core = words.filter((word) => (
+    !EDUCATION_TYPE_WORDS.has(word) && !EDUCATION_FILLER_WORDS.has(word)
+  )).sort().join(' ');
+  const acronym = words
+    .filter((word) => !EDUCATION_FILLER_WORDS.has(word))
+    .map((word) => word[0])
+    .join('');
+  return { full, type, core, acronym: acronym.length > 1 ? acronym : '' };
+}
+
+function sameEducation(leftValue, rightValue) {
+  const left = educationParts(leftValue);
+  const right = educationParts(rightValue);
+  if (!left.full || !right.full) return false;
+  if (left.full === right.full || (left.acronym && left.acronym === right.full) || (right.acronym && right.acronym === left.full)) {
+    return true;
+  }
+  if (left.acronym && left.acronym === right.acronym) return true;
+  return Boolean(left.core && left.core === right.core && (!left.type || !right.type || left.type === right.type));
+}
+
+function sameAchievementEvent(achievement, post) {
+  const achievementTerms = new Set(keywordTokens(achievement).filter((token) => !EVENT_GENERIC_TOKENS.has(token)));
+  const postTerms = new Set(keywordTokens(post).filter((token) => !EVENT_GENERIC_TOKENS.has(token)));
+  const shared = [...achievementTerms].filter((token) => postTerms.has(token));
+  return shared.length >= 3;
 }
 
 function explicitEntities(fact, key) {
@@ -55,8 +97,13 @@ function isExactEntityMatch(meFact, otherFact) {
   if ((a === 'company' && b === 'company') || (a === 'education' && b === 'education')) {
     const left = entitiesForFact(meFact);
     const right = entitiesForFact(otherFact);
-    return left.some((entity) => right.includes(entity));
+    return a === 'education'
+      ? left.some((entity) => right.some((other) => sameEducation(entity, other)))
+      : left.some((entity) => right.includes(entity));
   }
+
+  if (a === 'achievement' && b === 'post') return sameAchievementEvent(meFact?.text, otherFact?.text);
+  if (a === 'post' && b === 'achievement') return sameAchievementEvent(otherFact?.text, meFact?.text);
 
   if (a === 'skill' && b === 'skill') {
     const right = new Set(entitiesForFact(otherFact));

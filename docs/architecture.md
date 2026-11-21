@@ -39,7 +39,7 @@ flowchart TD
 
 ## Deep Mode Layer 1
 
-`src/layers/pipeline.js` runs the memory, company, and approach layers in order. For Layer 1, `src/layers/memory.js` turns the saved card and scraped profile into short facts. Direct email, phone, and recognized street-address patterns are removed from profile facts before embedding.
+`src/layers/pipeline.js` runs the memory, company, and approach layers in order. For Layer 1, `src/layers/memory.js` turns the saved card and scraped profile into short facts, preserving education and achievement facts ahead of long skill lists. Direct email, phone, and recognized street-address patterns are removed from profile facts before embedding.
 
 `src/utils/embeddings.js` creates and caches keyword vectors locally; matching has no hosted embeddings provider, model setting, or separate API key. `src/utils/matcher.js` combines cosine similarity with exact school, employer, skill, and tool matches; applies generic-overlap penalties; deduplicates the result; and returns up to six pairs. The popup displays the matched facts and scores.
 

@@ -84,18 +84,35 @@ test('memoryCardToFacts creates unique IDs and caps the collection at 40', () =>
   assert.equal(facts[0].id, 'M1');
 });
 
+test('memory fact limits retain education and achievements before a long skills list', () => {
+  const facts = memoryCardToFacts({
+    skills: Array.from({ length: 40 }, (_, index) => 'Skill ' + index),
+    education: [{ school: 'Example University', degree: 'BSc' }],
+    achievements: ['Won the Example Robotics Challenge']
+  });
+
+  assert.ok(facts.length <= 40);
+  assert.ok(facts.some((fact) => fact.type === 'education' && /Example University/.test(fact.text)));
+  assert.ok(facts.some((fact) => fact.type === 'achievement' && /Example Robotics Challenge/.test(fact.text)));
+});
+
 test('runMemoryLayer returns exact school, employer, and named-skill matches', async () => {
   const result = await runMemoryLayer({
     memoryCard: {
       headline: 'AI engineer',
       skills: ['Python'],
       education: [{ school: 'D. J. Sanghvi College of Engineering', degree: 'B.Tech' }],
-      experience: [{ title: 'Engineer', org: 'Acme Robotics', years: '2024–present', highlights: [] }]
+      experience: [{ title: 'Engineer', org: 'Acme Robotics', years: '2024–present', highlights: [] }],
+      achievements: ['Winner at ISRO Bharatiya Antariksh Hackathon 2026']
     },
     profileJSON: {
       currentCompany: 'Acme Robotics',
-      educationEntries: [{ school: 'D. J. Sanghvi College of Engineering' }],
-      skills: ['Python']
+      educationEntries: ['DJSCE'],
+      skills: ['Python'],
+      recentPostSummaries: [{
+        postNumber: 1,
+        summary: 'National Champions of ISRO BAH 2026'
+      }]
     }
   });
 
@@ -103,6 +120,7 @@ test('runMemoryLayer returns exact school, employer, and named-skill matches', a
   assert.ok(result.matches.some((match) => match.exact && match.tier === 'strong' && /Sanghvi/.test(match.meText)));
   assert.ok(result.matches.some((match) => match.exact && match.tier === 'strong' && /Acme Robotics/.test(match.meText)));
   assert.ok(result.matches.some((match) => match.exact && match.tier === 'strong' && /Python/.test(match.meText)));
+  assert.ok(result.matches.some((match) => match.exact && match.tier === 'strong' && /Achievement:/.test(match.meText)));
 });
 
 test('runMemoryLayer skips cleanly when there is no resume memory card', async () => {

@@ -47,26 +47,27 @@ export function memoryCardToFacts(card = {}) {
 
   add('role', card.headline);
   add('about', card.summary);
-  for (const skill of card.skills || []) add('skill', 'Skill: ' + skill, { entities: [skill] });
-  for (const entry of card.education || []) {
+  for (const entry of (card.education || []).slice(0, 4)) {
     add('education', [entry.degree, entry.field, entry.school, entry.years].filter(Boolean).join(' — '), {
       entity: entry.school || ''
     });
   }
-  for (const entry of card.experience || []) {
+  for (const achievement of (card.achievements || []).slice(0, 8)) {
+    add('achievement', 'Achievement: ' + achievement);
+  }
+  for (const entry of (card.experience || []).slice(0, 5)) {
     const text = [entry.title, entry.org, entry.years, ...(entry.highlights || [])].filter(Boolean).join(' — ');
     add('role', text);
     if (entry.org) add('company', entry.org, { entity: entry.org });
   }
-  for (const entry of card.projects || []) {
+  for (const entry of (card.projects || []).slice(0, 6)) {
     const tools = Array.isArray(entry.tech) ? entry.tech : [];
     add('project', [entry.name, entry.summary, ...tools].filter(Boolean).join(' — '), {
       projectName: entry.name || '',
       tools
     });
-    for (const tool of tools) add('skill', 'Skill: ' + tool, { entities: [tool] });
   }
-  for (const achievement of card.achievements || []) add('about', 'Achievement: ' + achievement);
+  for (const skill of card.skills || []) add('skill', 'Skill: ' + skill, { entities: [skill] });
   add('goal', card.goals);
   for (const interest of card.interests || []) add('goal', 'Interest: ' + interest);
   return facts;
